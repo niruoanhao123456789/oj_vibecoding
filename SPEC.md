@@ -27,10 +27,65 @@
 
 ## 4. 数据模型（MySQL）
 
-- `users(id, username, password_hash, role, created_at)`
-- `sessions(token, user_id, expires_at)`
-- `problems(id, title, description, sample_in, sample_out, time_limit_ms, memory_limit_mb, test_dir, created_by)`
-- `submissions(id, user_id, problem_id, code, status, exec_time_ms, memory_kb, error_message, created_at)`
+统一约定：主键均为自增 `INT UNSIGNED`；时间字段默认 `CURRENT_TIMESTAMP`；字符集 `utf8mb4`，排序规则 `utf8mb4_unicode_ci`。
+
+### 4.1 users — 用户表
+
+| 字段 | 类型 | 约束/默认 | 说明 |
+|---|---|---|---|
+| id | INT UNSIGNED | 自增主键 | 用户 ID |
+| username | VARCHAR(64) | NOT NULL, UNIQUE | 登录用户名 |
+| password | VARCHAR(128) | NOT NULL | 密码（教学演示，明文或简单存储均可） |
+| role | ENUM('student','teacher','admin') | NOT NULL, DEFAULT 'student' | 角色 |
+| status | TINYINT | NOT NULL, DEFAULT 1 | 1 正常 / 0 禁用 |
+| created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP | 注册时间 |
+
+### 4.2 sessions — 会话表
+
+| 字段 | 类型 | 约束/默认 | 说明 |
+|---|---|---|---|
+| token | CHAR(64) | 主键 | 随机会话 Token |
+| user_id | INT UNSIGNED | NOT NULL, FK → users(id) | 所属用户 |
+| created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+| expires_at | DATETIME | NOT NULL | 过期时间 |
+
+### 4.3 problems — 题目表
+
+| 字段 | 类型 | 约束/默认 | 说明 |
+|---|---|---|---|
+| id | INT UNSIGNED | 自增主键 | 题目 ID |
+| title | VARCHAR(255) | NOT NULL, UNIQUE | 题目标题 |
+| description | TEXT | NOT NULL | 题目描述（含输入/输出格式、数据范围） |
+| sample_in | TEXT | NOT NULL | 学生可见样例输入 |
+| sample_out | TEXT | NOT NULL | 学生可见样例输出 |
+| time_limit_ms | INT UNSIGNED | NOT NULL, DEFAULT 1000 | 单测试点 CPU 时限（毫秒） |
+| memory_limit_mb | INT UNSIGNED | NOT NULL, DEFAULT 256 | 单测试点内存上限（MB） |
+| test_dir | VARCHAR(255) | NOT NULL | 隐藏测试点目录路径（相对/绝对） |
+| created_by | INT UNSIGNED | NULL, FK → users(id) | 创建人（教师/管理员） |
+| created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+
+测试点目录 `test_dir` 约定：内含 `{编号}.in` / `{编号}.out` 成对文件（如 `1.in`、`1.out`），编号从 1 开始连续；额外支持 `score` 描述文件可选。
+
+### 4.4 submissions — 提交表
+
+| 字段 | 类型 | 约束/默认 | 说明 |
+|---|---|---|---|
+| id | INT UNSIGNED | 自增主键 | 提交 ID |
+| user_id | INT UNSIGNED | NOT NULL, FK → users(id) | 提交者 |
+| problem_id | INT UNSIGNED | NOT NULL, FK → problems(id) | 所属题目 |
+| code | TEXT / LONGTEXT | NOT NULL | 提交源码 |
+| status | VARCHAR(20) | NOT NULL, DEFAULT 'PENDING' | 判题状态（见 3. 状态机） |
+| exec_time_ms | INT UNSIGNED | NULL | 最大耗时（毫秒） |
+| memory_kb | INT UNSIGNED | NULL | 峰值内存（KB） |
+| error_message | TEXT | NULL | 编译错误/首个失败点详情 |
+| created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP | 提交时间 |
+
+### 4.5 索引与约束
+
+- `users.username` UNIQUE；`users.role` 普通索引。
+- `sessions.token` 主键；`sessions.user_id` 索引 + 外键。
+- `problems.title` UNIQUE。
+- `submissions` 索引：`(user_id)`、`(problem_id)`、`(status)`、`(user_id, created_at)`；`problem_id`/`user_id` 外键。
 
 ## 5. API 边界（REST JSON，/api 前缀）
 
@@ -111,15 +166,78 @@
 
 ## 10. TODO 清单
 
-1. **工程搭建**：CMake、cpp-httplib 与 MySQL client 集成、目录结构
-2. **数据层**：建表 SQL、JSON 题目导入器（含测试点目录落地）
-3. **认证**：注册/登录/登出/Session/角色
-4. **题目 API + 静态托管**
-5. **判题引擎**：编译、限资源子进程运行、宽松比对、2-4 worker 池、任务队列、容错重判
-6. **提交流程**：提交 API + 前端轮询
-7. **前端全页面**
-8. **管理端**：教师导入/CRUD/统计/CSV，管理员用户管理
-9. **日志 + 测试**
+### 阶段 1：工程搭建
+- [ ] 初始化目录结构：`src/`（后端源码）、`frontend/`（静态资源）、`sql/`（建表脚本）、`problems/`（题目 JSON 与测试点）、`scripts/`、`tests/`
+- [ ] 编写 `CMakeLists.txt`，引入 cpp-httplib（头文件）与 MySQL Connector/C（libmysqlclient）
+- [ ] 编写 `main.cpp` 启动骨架：加载配置（端口、DB 连接串、worker 数、存储路径）
+- [ ] 验证：`cmake && make` 编译通过；启动后 `GET /` 返回静态首页；DB 连接成功
+
+### 阶段 2：数据层
+- [ ] 编写 `sql/schema.sql`：按第 4 章建 4 张表 + 索引 + 外键 + 初始管理员账号
+- [ ] 封装 DB 访问层（`db.*`）：连接管理、参数化查询辅助函数
+- [ ] 定义题目 JSON 格式（title/description/sample_in/sample_out/time_limit_ms/memory_limit_mb/test_cases 或 test_dir 引用）
+- [ ] 编写 JSON 题目导入器：解析 JSON、校验字段、写 problems 表、将隐藏测试点写入 `test_dir`
+- [ ] 验证：用示例题目 JSON 导入，DB 中数据与测试点文件齐全
+
+### 阶段 3：登录注册模块（认证）
+**后端**
+- [ ] `POST /api/register`：校验用户名唯一性、长度与字符合法性，校验密码长度，写入 users 表（默认 student 角色）
+- [ ] `POST /api/login`：查询用户、校验密码，生成随机 token 写入 sessions，`Set-Cookie` 返回会话
+- [ ] `POST /api/logout`：删除会话并清除 Cookie
+- [ ] `GET /api/me`：凭 Cookie 返回当前用户信息（id/用户名/角色）
+- [ ] Session 中间件：从 Cookie 解析 token、校验未过期、注入请求上下文；无有效会话时返回 401
+- [ ] 错误码与提示规范：用户名已存在 / 用户名或密码错误 / 参数非法 等，返回统一 JSON 结构
+- [ ] 验证：注册→登录→访问受保护接口→登出 全流程 curl 通过
+
+**前端**
+- [ ] 登录页：用户名/密码表单、错误提示展示、回车提交、登录成功跳转题目列表页
+- [ ] 注册页：用户名/密码/确认密码表单，前端校验（非空、两次密码一致、用户名与密码长度），注册成功跳转登录页，错误提示展示
+- [ ] 公共登录态：导航栏根据 `GET /api/me` 展示登录/注册入口或用户名+登出按钮
+- [ ] 验证：浏览器手动完成注册→登录→登出，错误场景提示正确
+
+### 阶段 4：题目 API + 静态托管
+- [ ] `GET /api/problems`：列表（题号/标题/难度/提交数/通过率/本人状态）
+- [ ] `GET /api/problems/:id`：详情（描述/样例，不含隐藏测试点）
+- [ ] cpp-httplib 注册静态目录处理器，托管 `frontend/`
+- [ ] 验证：curl 可查列表与详情；浏览器可加载前端资源
+
+### 阶段 5：判题引擎
+- [ ] 编译模块：`g++ -O2 -std=c++20` 编译到临时目录，捕获编译错误输出，编译超时处理
+- [ ] 运行模块：`fork/exec` 子进程，`setrlimit` 设 CPU/内存/时间上限，逐测试点运行并收集输出
+- [ ] 状态判定：超时→TLE、超内存→MLE、非零退出→RE；其余→宽松比对（忽略空白/空行）
+- [ ] 宽松比对函数：规范化输出后逐行比较
+- [ ] 任务队列：内存队列（PENDING），提交入队
+- [ ] worker 池：2-4 个线程消费队列，串行编译/运行，回写 submissions 表状态与耗时/内存/错误信息
+- [ ] 容错：worker 崩溃/卡死/测试点缺失→SYSTEM_ERROR，支持重判接口
+- [ ] 验证：构造 AC/WA/TLE/MLE/CE/RE 六类提交，状态判定全部正确
+
+### 阶段 6：提交流程
+- [ ] `POST /api/submissions`：写 submissions(PENDING) → 入队 → 返回 submission_id
+- [ ] `GET /api/submissions/:id`：返回当前状态/结果（供轮询）
+- [ ] `GET /api/submissions?user_id=`：本人提交历史列表
+- [ ] 验证：提交后轮询能观察到 PENDING→…→终态全过程
+
+### 阶段 7：前端全页面
+- [ ] 公共框架：导航栏（含登录态）、样式表、公共 JS（fetch 封装、状态徽标渲染、轮询工具）
+- [ ] 题目列表页（筛选/搜索/状态徽标）
+- [ ] 题目详情页（左侧题目区 + 右侧代码编辑器 + 提交按钮 + 轮询结果区）
+- [ ] 提交历史页、提交详情页
+- [ ] 个人统计页
+- [ ] 验证：全页面在浏览器手动走通完整流程
+
+### 阶段 8：管理端
+- [ ] 教师题目管理页：JSON 导入表单、题目列表（编辑/删除）
+- [ ] 教师统计页 + CSV 导出（`GET /api/admin/submissions/export.csv`）
+- [ ] `POST /api/admin/problems/import`、`PUT/DELETE /api/admin/problems/:id`
+- [ ] 管理员用户管理页：用户列表/新增/禁用/删除/角色调整
+- [ ] 管理员配置页：判题限制（时间/内存上限）、测试用例维护
+- [ ] 验证：教师导入→题目立即可见；管理员调整角色生效
+
+### 阶段 9：日志 + 测试
+- [ ] 统一日志模块：记录启动、请求、判题事件、错误；按天滚动
+- [ ] 接口测试脚本（shell/curl 或简单脚本）：覆盖注册/登录/题目/提交/判题/管理接口
+- [ ] 判题单元测试：六类结果、宽松比对、资源限制边界
+- [ ] 端到端冒烟测试：注册→选题→提交→判题→统计 全流程自动验证
 
 ## 11. 验收标准
 
