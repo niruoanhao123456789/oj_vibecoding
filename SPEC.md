@@ -2,7 +2,7 @@
 
 ## 1. 项目概述
 
-面向课程教学场景的轻量 OJ 平台。教师用 JSON 导入题目，学生注册登录后选题、在线提交 C++ 代码，后端异步判题（子进程编译运行、CPU/内存/超时受限），学生查看结果与历史统计，教师查看统计并导出提交记录。
+面向课程教学场景的轻量 OJ 平台。教师用 JSON 导入题目，学生注册登录后选题、在线提交 C++/C 代码，后端异步判题（子进程编译运行、CPU/内存/超时受限），学生查看结果与历史统计，教师查看统计并导出提交记录。
 
 - **后端**：C++17 + cpp-httplib（同时托管静态前端 + 提供 REST JSON API）
 - **前端**：原生 HTML + CSS + JS（无框架）
@@ -20,7 +20,7 @@
 ## 3. 核心业务规则
 
 - **题目**：初始 ≤10 题，JSON 文件导入；每题的隐藏测试点与学生可见样例分离。
-- **判题**：仅 C++（g++）。异步判题：提交 → PENDING → 2-4 个 worker 并发判 → 结果入库 → 前端轮询。
+- **判题**：仅支持 C++ 与 C（g++ / gcc），不支持 Java、Python。异步判题：提交 → PENDING → 2-4 个 worker 并发判 → 结果入库 → 前端轮询。
 - **判题限制**：CPU 时间上限、内存上限、总超时；超限判 TLE/MLE。
 - **输出比对**：宽松比较（忽略全部空白与空行）。
 - **状态机**（完整 + 容错）：`PENDING → COMPILING → COMPILE_ERROR / COMPILE_TIMEOUT / RUNNING → AC / WA / RE / TLE / MLE / SYSTEM_ERROR`；判题进程崩溃/卡死时置 `SYSTEM_ERROR` 并允许重判。
@@ -73,6 +73,7 @@
 | id | INT UNSIGNED | 自增主键 | 提交 ID |
 | user_id | INT UNSIGNED | NOT NULL, FK → users(id) | 提交者 |
 | problem_id | INT UNSIGNED | NOT NULL, FK → problems(id) | 所属题目 |
+| language | ENUM('cpp','c') | NOT NULL, DEFAULT 'cpp' | 提交语言（仅支持 C++/C） |
 | code | TEXT / LONGTEXT | NOT NULL | 提交源码 |
 | status | VARCHAR(20) | NOT NULL, DEFAULT 'PENDING' | 判题状态（见 3. 状态机） |
 | exec_time_ms | INT UNSIGNED | NULL | 最大耗时（毫秒） |
@@ -91,7 +92,7 @@
 
 - 认证：`POST /api/register` `POST /api/login` `POST /api/logout` `GET /api/me`
 - 题目：`GET /api/problems` `GET /api/problems/:id`
-- 提交：`POST /api/submissions` `GET /api/submissions?user_id=` `GET /api/submissions/:id`（轮询判题状态）
+- 提交：`POST /api/submissions`（参数含 `language`，仅接受 `cpp`/`c`）`GET /api/submissions?user_id=` `GET /api/submissions/:id`（轮询判题状态）
 - 教师：`POST /api/admin/problems/import` `PUT/DELETE /api/admin/problems/:id` `GET /api/admin/stats` `GET /api/admin/submissions/export.csv`
 - 管理员：`GET/PUT /api/admin/users` `GET/PUT /api/admin/config`
 
@@ -109,7 +110,7 @@
                                                 ▼
                                  ┌──────────────────────────────┐
                                  │ Judge Worker                 │
-                                 │ g++ -O2 -std=c++17 编译      │
+                                 │ g++ / gcc -O2 编译（C++/C）   │
                                  │ subprocess 运行，rlimit+超时   │
                                  │ 宽松比对隐藏测试点，回写结果    │
                                  └──────────────────────────────┘
@@ -135,7 +136,7 @@ oj_vibecoding/
 │   ├── problem.h / problem.cpp    # 题目 API + JSON 导入器
 │   ├── submission.h / submission.cpp  # 提交 API + 轮询查询
 │   ├── judge/
-│   │   ├── compiler.h / compiler.cpp  # g++ 编译模块
+│   │   ├── compiler.h / compiler.cpp  # g++/gcc 编译模块（C++/C）
 │   │   ├── runner.h / runner.cpp      # 限资源子进程运行模块
 │   │   ├── compare.h / compare.cpp    # 宽松输出比对
 │   │   ├── queue.h / queue.cpp        # 判题任务队列
@@ -203,7 +204,7 @@ oj_vibecoding/
 
 ### 7.4 题目详情页
 - 左侧：题目描述、输入/输出格式、数据范围、学生可见样例（输入/输出）。
-- 右侧：代码编辑器（textarea + 简单高亮/行号）、语言固定 C++、提交按钮。
+- 右侧：代码编辑器（textarea + 简单高亮/行号）、语言固定 C++/C（支持选择 C++ 或 C）、提交按钮。
 - 提交后进入判题状态展示：通过轮询实时显示 PENDING → COMPILING → RUNNING → 最终结果。
 - 判题完成后展示结果状态、耗时、内存占用；WA 时展示首个失败的测试点输入/期望输出/实际输出。
 
@@ -232,7 +233,7 @@ oj_vibecoding/
 
 ## 9. 边缘与异常
 
-空提交/超长代码、编译错误消息展示、判题 worker 崩溃、测试点文件缺失、导入非法 JSON、重复题目 title、Session 过期、并发提交 → 均返回明确错误码并记录日志。
+空提交/超长代码、提交 Java/Python 等非 C/C++ 代码（拒绝并返回明确错误）、编译错误消息展示、判题 worker 崩溃、测试点文件缺失、导入非法 JSON、重复题目 title、Session 过期、并发提交 → 均返回明确错误码并记录日志。
 
 ## 10. TODO 清单
 
@@ -272,7 +273,7 @@ oj_vibecoding/
 - [ ] 验证：curl 可查列表与详情；浏览器可加载前端资源
 
 ### 阶段 5：判题引擎
-- [ ] 编译模块：`g++ -O2 -std=c++20` 编译到临时目录，捕获编译错误输出，编译超时处理
+- [ ] 编译模块：C++ 用 `g++ -O2 -std=c++17`、C 用 `gcc -O2 -std=c11` 编译到临时目录，捕获编译错误输出，编译超时处理
 - [ ] 运行模块：`fork/exec` 子进程，`setrlimit` 设 CPU/内存/时间上限，逐测试点运行并收集输出
 - [ ] 状态判定：超时→TLE、超内存→MLE、非零退出→RE；其余→宽松比对（忽略空白/空行）
 - [ ] 宽松比对函数：规范化输出后逐行比较
