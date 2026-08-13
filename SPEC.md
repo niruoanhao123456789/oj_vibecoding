@@ -114,6 +114,76 @@
                                  │ 宽松比对隐藏测试点，回写结果    │
                                  └──────────────────────────────┘
 ```
+ 
+## 6.1 项目目录结构
+
+```
+oj_vibecoding/
+├── CMakeLists.txt                 # 构建配置（cpp-httplib + libmysqlclient）
+├── README.md                      # 项目说明与运行指南
+├── config/
+│   └── server.json                # 服务配置（端口/DB/worker 数/路径）
+├── sql/
+│   ├── schema.sql                 # 建表脚本（4 张表 + 索引 + 初始账号）
+│   └── init.sh                    # 初始化数据库辅助脚本
+├── src/
+│   ├── main.cpp                   # 程序入口，路由注册与启动
+│   ├── server.h / server.cpp      # HTTP 服务与静态托管
+│   ├── config.h / config.cpp      # 配置加载
+│   ├── db.h / db.cpp              # MySQL 访问层（参数化查询）
+│   ├── auth.h / auth.cpp          # 注册/登录/登出/Session 中间件
+│   ├── problem.h / problem.cpp    # 题目 API + JSON 导入器
+│   ├── submission.h / submission.cpp  # 提交 API + 轮询查询
+│   ├── judge/
+│   │   ├── compiler.h / compiler.cpp  # g++ 编译模块
+│   │   ├── runner.h / runner.cpp      # 限资源子进程运行模块
+│   │   ├── compare.h / compare.cpp    # 宽松输出比对
+│   │   ├── queue.h / queue.cpp        # 判题任务队列
+│   │   └── worker.h / worker.cpp      # worker 池（2-4 线程）
+│   └── admin/
+│       ├── admin_problem.h / .cpp     # 教师题目 CRUD/导入
+│       ├── admin_stats.h / .cpp       # 统计与 CSV 导出
+│       └── admin_user.h / .cpp        # 管理员用户管理
+├── frontend/
+│   ├── index.html                  # 登录/注册入口页
+│   ├── css/
+│   │   └── style.css               # 全局样式
+│   ├── js/
+│   │   ├── common.js               # fetch 封装/登录态/状态徽标/轮询工具
+│   │   ├── auth.js                 # 登录/注册页逻辑
+│   │   ├── problems.js             # 题目列表页逻辑
+│   │   ├── problem.js              # 题目详情页逻辑
+│   │   ├── submissions.js          # 提交历史页逻辑
+│   │   ├── submission.js           # 提交详情页逻辑
+│   │   ├── stats.js                # 个人统计页逻辑
+│   │   └── admin.js                # 管理端逻辑（教师/管理员）
+│   └── pages/                      # 各功能页 HTML
+│       ├── login.html
+│       ├── register.html
+│       ├── problems.html
+│       ├── problem.html
+│       ├── submissions.html
+│       ├── submission.html
+│       ├── stats.html
+│       └── admin.html
+├── problems/
+│   ├── aplusb/
+│   │   ├── problem.json            # 题目元数据（描述/样例/限制）
+│   │   └── tests/                  # 隐藏测试点
+│   │       ├── 1.in / 1.out
+│   │       ├── 2.in / 2.out
+│   │       └── ...
+│   └── ...                         # 更多题目目录
+├── data/
+│   └── submissions/                # 判题工作区（编译产物、运行输出，按提交 ID 隔离）
+├── scripts/
+│   ├── import_problem.sh           # 调用导入接口/脚本导入题目
+│   └── run_tests.sh                # 自动化测试入口
+└── tests/
+    ├── api/                        # 接口测试脚本（curl）
+    ├── judge/                      # 判题六类结果用例
+    └── e2e/                        # 端到端冒烟脚本
+```
 
 ## 7. 前端页面
 
