@@ -36,3 +36,6 @@ build/
 
 # Runtime data
 data/submissions/*
+
+# Logs
+logs/

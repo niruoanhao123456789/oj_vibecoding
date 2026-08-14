@@ -129,6 +129,7 @@ oj_vibecoding/
 │   └── init.sh                    # 初始化数据库辅助脚本
 ├── src/
 │   ├── main.cpp                   # 程序入口，路由注册与启动
+│   ├── log.h / log.cpp            # 统一日志模块（等级过滤/双输出/按天滚动）
 │   ├── server.h / server.cpp      # HTTP 服务与静态托管
 │   ├── config.h / config.cpp      # 配置加载
 │   ├── db.h / db.cpp              # MySQL 访问层（参数化查询）
@@ -238,14 +239,15 @@ oj_vibecoding/
 ## 10. TODO 清单
 
 ### 阶段 1：工程搭建
-- [ ] 初始化目录结构：`src/`（后端源码）、`frontend/`（静态资源）、`sql/`（建表脚本）、`problems/`（题目 JSON 与测试点）、`scripts/`、`tests/`
-- [ ] 编写 `CMakeLists.txt`，引入 cpp-httplib（头文件）与 MySQL Connector/C（libmysqlclient）
-- [ ] 编写 `main.cpp` 启动骨架：加载配置（端口、DB 连接串、worker 数、存储路径）
-- [ ] 验证：`cmake && make` 编译通过；启动后 `GET /` 返回静态首页；DB 连接成功
+- [x] 初始化目录结构：`src/`（后端源码）、`frontend/`（静态资源）、`sql/`（建表脚本）、`problems/`（题目 JSON 与测试点）、`scripts/`、`tests/`
+- [x] 编写 `CMakeLists.txt`，引入 cpp-httplib（头文件）与 MySQL Connector/C（libmysqlclient）
+- [x] 编写 `main.cpp` 启动骨架：加载配置（端口、DB 连接串、worker 数、存储路径）
+- [x] 日志封装模块：提供线程安全的 `log.h`/`log.cpp` 接口，统一记录启动、HTTP 请求、判题事件与错误；支持日志等级过滤、控制台/文件双输出、按天滚动
+- [x] 验证：`cmake && make` 编译通过；启动后 `GET /` 返回静态首页；DB 连接成功
 
 ### 阶段 2：数据层
-- [ ] 编写 `sql/schema.sql`：按第 4 章建 4 张表 + 索引 + 外键 + 初始管理员账号
-- [ ] 封装 DB 访问层（`db.*`）：连接管理、参数化查询辅助函数
+- [x] 编写 `sql/schema.sql`：按第 4 章建 4 张表 + 索引 + 外键 + 初始管理员账号
+- [x] 封装 DB 访问层（`db.*`）：连接管理、参数化查询辅助函数
 - [ ] 定义题目 JSON 格式（title/description/sample_in/sample_out/time_limit_ms/memory_limit_mb/test_cases 或 test_dir 引用）
 - [ ] 编写 JSON 题目导入器：解析 JSON、校验字段、写 problems 表、将隐藏测试点写入 `test_dir`
 - [ ] 验证：用示例题目 JSON 导入，DB 中数据与测试点文件齐全
