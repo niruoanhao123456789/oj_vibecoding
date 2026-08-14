@@ -50,6 +50,11 @@ oj_register_gtest(oj_config_test config_test.cpp ${OJ_TEST_CORE})
 # oj_log_test：日志模块纯单元测试
 oj_register_gtest(oj_log_test log_test.cpp ${OJ_TEST_CORE})
 
+# oj_problem_test：题目 JSON 解析纯单元测试 + 导入集成测试
+oj_register_gtest(oj_problem_test problem_test.cpp ${OJ_TEST_CORE}
+  ${OJ_TEST_SRC_DIR}/src/problem.cpp
+)
+
 # oj_db_test：DB 访问层集成测试（连接/参数化执行/类型化查询/schema）
 oj_register_gtest(oj_db_test db_test.cpp ${OJ_TEST_CORE})
 

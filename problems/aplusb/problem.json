@@ -1,0 +1,9 @@
+{
+  "title": "A+B Problem",
+  "description": "读入两个整数 a 和 b，输出它们的和。\n\n输入格式：一行两个整数 a b（|a|, |b| ≤ 10^9）。\n输出格式：一个整数，表示 a + b。",
+  "sample_in": "1 2\n",
+  "sample_out": "3\n",
+  "time_limit_ms": 1000,
+  "memory_limit_mb": 256,
+  "test_dir": "tests"
+}

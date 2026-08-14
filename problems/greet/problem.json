@@ -1,0 +1,10 @@
+{
+  "title": "Greeting",
+  "description": "读入一行姓名 name，输出问候语。\n\n输入格式：一行字符串 name。\n输出格式：一行 \"Hello, name!\"。",
+  "sample_in": "Alice\n",
+  "sample_out": "Hello, Alice!\n",
+  "test_cases": [
+    { "input": "Alice\n", "output": "Hello, Alice!\n", "name": "alice", "score": 50 },
+    { "input": "Bob\n", "output": "Hello, Bob!\n", "name": "bob", "score": 50 }
+  ]
+}

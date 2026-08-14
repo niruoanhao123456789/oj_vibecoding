@@ -88,6 +88,67 @@
 - `problems.title` UNIQUE。
 - `submissions` 索引：`(user_id)`、`(problem_id)`、`(status)`、`(user_id, created_at)`；`problem_id`/`user_id` 外键。
 
+### 4.6 题目 JSON 格式（导入源）
+
+每个题目一个 JSON 文件，由 `oj_import` 导入器解析校验后写入 `problems` 表，
+隐藏测试点落盘到 `data/problems/<problem_id>/`（`{编号}.in` / `{编号}.out` 成对文件）。
+
+| 字段 | 类型 | 必填 | 默认 | 说明 |
+|---|---|---|---|---|
+| title | string | 是 | — | 题目标题，非空且 ≤255 字符，唯一 |
+| description | string | 是 | — | 题目描述（含输入/输出格式、数据范围） |
+| sample_in | string | 是 | — | 学生可见样例输入 |
+| sample_out | string | 是 | — | 学生可见样例输出 |
+| time_limit_ms | int | 否 | 1000 | 单测试点 CPU 时限（毫秒，>0） |
+| memory_limit_mb | int | 否 | 256 | 单测试点内存上限（MB，>0） |
+| test_dir | string | 二选一 | — | 引用外部测试点目录（相对 JSON 所在目录解析或绝对路径） |
+| test_cases | array | 二选一 | — | 内联测试点数组，与 `test_dir` 互斥 |
+
+`test_dir` 目录约定：内含 `{编号}.in` / `{编号}.out` 成对文件（编号从 1 开始，不必连续），
+可选 `score` 文件（每行一个测试点分值）一并复制。
+
+`test_cases` 元素：
+
+| 字段 | 类型 | 必填 | 默认 | 说明 |
+|---|---|---|---|---|
+| input | string | 是 | — | 该测试点输入 |
+| output | string | 是 | — | 该测试点期望输出 |
+| name | string | 否 | — | 测试点名（可选） |
+| score | int | 否 | — | 该测试点分值；任一点指定则生成 `score` 文件，缺省按 0 |
+
+示例（test_dir 模式）：
+
+```json
+{
+  "title": "A+B Problem",
+  "description": "读入两个整数 a、b，输出它们的和。",
+  "sample_in": "1 2\n",
+  "sample_out": "3\n",
+  "time_limit_ms": 1000,
+  "memory_limit_mb": 256,
+  "test_dir": "tests"
+}
+```
+
+示例（内联 test_cases 模式）：
+
+```json
+{
+  "title": "Greeting",
+  "description": "读入一行姓名 name，输出 Hello, name!",
+  "sample_in": "Alice\n",
+  "sample_out": "Hello, Alice!\n",
+  "test_cases": [
+    { "input": "Alice\n", "output": "Hello, Alice!\n", "score": 50 },
+    { "input": "Bob\n", "output": "Hello, Bob!\n", "score": 50 }
+  ]
+}
+```
+
+导入校验：必填字段缺失或类型错误、标题为空/超长、时间或内存限制非正整数、
+`test_dir` 与 `test_cases` 同时给出、两者均缺、`test_cases` 为空数组、测试点缺 `input`/`output`、
+标题重复、`test_dir` 目录不存在或无 `*.in` 文件、成对 `.out` 缺失 → 均报错并回滚（不留脏数据）。
+
 ## 5. API 边界（REST JSON，/api 前缀）
 
 - 认证：`POST /api/register` `POST /api/login` `POST /api/logout` `GET /api/me`
@@ -133,8 +194,8 @@ oj_vibecoding/
 │   ├── server.h / server.cpp      # HTTP 服务与静态托管
 │   ├── config.h / config.cpp      # 配置加载
 │   ├── db.h / db.cpp              # MySQL 访问层（参数化查询）
+│   ├── problem.h / problem.cpp    # 题目 JSON 格式解析 + 导入器
 │   ├── auth.h / auth.cpp          # 注册/登录/登出/Session 中间件
-│   ├── problem.h / problem.cpp    # 题目 API + JSON 导入器
 │   ├── submission.h / submission.cpp  # 提交 API + 轮询查询
 │   ├── judge/
 │   │   ├── compiler.h / compiler.cpp  # g++/gcc 编译模块（C++/C）
@@ -146,6 +207,8 @@ oj_vibecoding/
 │       ├── admin_problem.h / .cpp     # 教师题目 CRUD/导入
 │       ├── admin_stats.h / .cpp       # 统计与 CSV 导出
 │       └── admin_user.h / .cpp        # 管理员用户管理
+├── tools/
+│   └── oj_import.cpp              # 命令行题目导入工具（阶段 2 验证用）
 ├── frontend/
 │   ├── index.html                  # 登录/注册入口页
 │   ├── css/
@@ -248,9 +311,9 @@ oj_vibecoding/
 ### 阶段 2：数据层
 - [x] 编写 `sql/schema.sql`：按第 4 章建 4 张表 + 索引 + 外键 + 初始管理员账号
 - [x] 封装 DB 访问层（`db.*`）：连接管理、参数化查询辅助函数
-- [ ] 定义题目 JSON 格式（title/description/sample_in/sample_out/time_limit_ms/memory_limit_mb/test_cases 或 test_dir 引用）
-- [ ] 编写 JSON 题目导入器：解析 JSON、校验字段、写 problems 表、将隐藏测试点写入 `test_dir`
-- [ ] 验证：用示例题目 JSON 导入，DB 中数据与测试点文件齐全
+- [x] 定义题目 JSON 格式（title/description/sample_in/sample_out/time_limit_ms/memory_limit_mb/test_cases 或 test_dir 引用），见 4.6 节
+- [x] 编写 JSON 题目导入器（`problem.*`）：解析 JSON、校验字段、写 problems 表、将隐藏测试点写入 `test_dir`；命令行工具 `tools/oj_import.cpp` + `scripts/import_problem.sh`
+- [x] 验证：`oj_import` 导入示例题目（`problems/aplusb` test_dir 模式、`problems/greet` 内联模式），DB 中数据与测试点文件齐全；重复标题/目录缺失回滚无脏数据
 
 ### 阶段 3：登录注册模块（认证）
 **后端**

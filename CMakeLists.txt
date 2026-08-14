@@ -23,6 +23,7 @@ add_executable(oj_server
   src/config.cpp
   src/db.cpp
   src/log.cpp
+  src/problem.cpp
 )
 
 target_include_directories(oj_server PRIVATE
@@ -41,6 +42,25 @@ target_link_libraries(oj_server PRIVATE
 )
 
 install(TARGETS oj_server RUNTIME DESTINATION bin)
+
+# 命令行题目导入工具（阶段 2）
+add_executable(oj_import
+  tools/oj_import.cpp
+  src/problem.cpp
+  src/config.cpp
+  src/db.cpp
+  src/log.cpp
+)
+target_include_directories(oj_import PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  /usr/include/jsoncpp
+)
+target_link_libraries(oj_import PRIVATE
+  ${MYSQL_CLIENT_LIB}
+  jsoncpp
+  Threads::Threads
+)
+install(TARGETS oj_import RUNTIME DESTINATION bin)
 
 include(CTest)
 

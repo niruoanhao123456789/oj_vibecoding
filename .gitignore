@@ -36,6 +36,7 @@ build/
 
 # Runtime data
 data/submissions/*
+data/problems/*
 
 # Logs
 logs/
