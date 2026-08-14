@@ -26,15 +26,18 @@ function(oj_register_gtest name)
   add_executable(${name} ${ARGN})
   target_include_directories(${name} PRIVATE
     ${OJ_TEST_SRC_DIR}/src
+    ${HTTPLIB_INCLUDE_DIR}
     /usr/include/jsoncpp
   )
   target_compile_definitions(${name} PRIVATE
     OJ_SOURCE_DIR="${OJ_TEST_SRC_DIR}"
+    HTTPLIB_HEADER_ONLY
   )
   target_link_libraries(${name} PRIVATE
     GTest::gtest
     GTest::gtest_main
     ${MYSQL_CLIENT_LIB}
+    cpp-httplib
     jsoncpp
     Threads::Threads
   )
@@ -47,12 +50,23 @@ oj_register_gtest(oj_field_test field_test.cpp ${OJ_TEST_CORE})
 # oj_config_test：配置加载纯单元测试
 oj_register_gtest(oj_config_test config_test.cpp ${OJ_TEST_CORE})
 
+# oj_auth_test：认证校验纯单元测试
+oj_register_gtest(oj_auth_test auth_test.cpp ${OJ_TEST_CORE}
+  ${OJ_TEST_SRC_DIR}/src/auth.cpp
+)
+
 # oj_log_test：日志模块纯单元测试
 oj_register_gtest(oj_log_test log_test.cpp ${OJ_TEST_CORE})
 
-# oj_problem_test：题目 JSON 解析纯单元测试 + 导入集成测试
+# oj_problem_test：题目 JSON 解析纯单元测试 + 导入/可见性集成测试
 oj_register_gtest(oj_problem_test problem_test.cpp ${OJ_TEST_CORE}
   ${OJ_TEST_SRC_DIR}/src/problem.cpp
+  ${OJ_TEST_SRC_DIR}/src/ojclass.cpp
+)
+
+# oj_class_test：班级管理单元测试（邀请码纯单测 + 建班/入班集成测试）
+oj_register_gtest(oj_class_test ojclass_test.cpp ${OJ_TEST_CORE}
+  ${OJ_TEST_SRC_DIR}/src/ojclass.cpp
 )
 
 # oj_db_test：DB 访问层集成测试（连接/参数化执行/类型化查询/schema）
@@ -61,6 +75,9 @@ oj_register_gtest(oj_db_test db_test.cpp ${OJ_TEST_CORE})
 # oj_server_test：HTTP 服务冒烟测试（health/静态托管/404）
 add_executable(oj_server_test server_test.cpp
   ${OJ_TEST_SRC_DIR}/src/server.cpp
+  ${OJ_TEST_SRC_DIR}/src/auth.cpp
+  ${OJ_TEST_SRC_DIR}/src/problem.cpp
+  ${OJ_TEST_SRC_DIR}/src/ojclass.cpp
   ${OJ_TEST_CORE}
 )
 target_include_directories(oj_server_test PRIVATE

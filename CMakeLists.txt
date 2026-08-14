@@ -20,10 +20,12 @@ find_library(MYSQL_CLIENT_LIB NAMES mysqlclient REQUIRED)
 add_executable(oj_server
   src/main.cpp
   src/server.cpp
+  src/auth.cpp
   src/config.cpp
   src/db.cpp
   src/log.cpp
   src/problem.cpp
+  src/ojclass.cpp
 )
 
 target_include_directories(oj_server PRIVATE

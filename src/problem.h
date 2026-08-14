@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <json/json.h>
+
 #include <string>
 #include <vector>
 
@@ -30,6 +32,7 @@ struct ProblemData {
     std::string sample_out;
     unsigned int time_limit_ms = 1000;
     unsigned int memory_limit_mb = 256;
+    int difficulty = 1;  // 1 简单 / 2 中等 / 3 困难
 
     // 内联测试点（test_cases 模式）
     std::vector<TestCaseData> test_cases;
@@ -47,5 +50,21 @@ ProblemData parse_problem_json(const std::string& json_path);
 unsigned long long import_problem(Database& db, const ProblemData& data,
                                   const std::string& test_root,
                                   unsigned int created_by = 0);
+
+// ---- 题目查询 API（阶段 4）----
+
+// 查询当前用户可见的题目列表（按 SPEC 4.8 可见性规则过滤）：
+//   教师/管理员：全部题目；
+//   学生：本班教师发布的题目 + 全局题（created_by IS NULL，需已入班）；
+//   未登录 / 未入班学生：空列表。
+// 含提交数/通过率；登录用户附带本人每题状态（AC / attempted / not_started）。
+// 成功填充 out["problems"] 数组并返回 true。
+bool query_problem_list(Database& db, unsigned int user_id,
+                        const std::string& role, Json::Value& out);
+
+// 查询题目详情（不含隐藏测试点目录），按 SPEC 4.8 可见性过滤。
+// 可见且存在返回 true 并填充 out["problem"]；不可见或不存在返回 false。
+bool query_problem_detail(Database& db, unsigned int id, unsigned int user_id,
+                          const std::string& role, Json::Value& out);
 
 } // namespace oj

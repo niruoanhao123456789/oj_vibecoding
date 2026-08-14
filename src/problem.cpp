@@ -8,6 +8,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -95,6 +96,20 @@ static unsigned int require_positive_int(const Json::Value& v, const char* key,
     return static_cast<unsigned int>(v[key].asInt());
 }
 
+static int parse_difficulty(const Json::Value& v) {
+    if (!v.isMember("difficulty")) {
+        return 1;
+    }
+    if (!v["difficulty"].isInt()) {
+        throw std::runtime_error("field must be an integer: difficulty");
+    }
+    const int d = v["difficulty"].asInt();
+    if (d < 1 || d > 3) {
+        throw std::runtime_error("difficulty must be 1 (easy), 2 (medium) or 3 (hard)");
+    }
+    return d;
+}
+
 ProblemData parse_problem_json(const std::string& json_path) {
     Json::Value root = parse_json_file(json_path);
 
@@ -111,6 +126,7 @@ ProblemData parse_problem_json(const std::string& json_path) {
     d.sample_out = require_string(root, "sample_out");
     d.time_limit_ms = require_positive_int(root, "time_limit_ms", 1000);
     d.memory_limit_mb = require_positive_int(root, "memory_limit_mb", 256);
+    d.difficulty = parse_difficulty(root);
 
     const bool has_dir = root.isMember("test_dir");
     const bool has_cases = root.isMember("test_cases");
@@ -243,14 +259,15 @@ unsigned long long import_problem(Database& db, const ProblemData& data,
     auto st = db.prepare(
         "INSERT INTO problems "
         "(title, description, sample_in, sample_out, time_limit_ms, "
-        " memory_limit_mb, test_dir, created_by) "
-        "VALUES (?, ?, ?, ?, ?, ?, '', ?)");
+        " memory_limit_mb, difficulty, test_dir, created_by) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, '', ?)");
     st->bind(data.title)
         .bind(data.description)
         .bind(data.sample_in)
         .bind(data.sample_out)
         .bind(data.time_limit_ms)
-        .bind(data.memory_limit_mb);
+        .bind(data.memory_limit_mb)
+        .bind(data.difficulty);
     if (created_by == 0) {
         st->bind_null();
     } else {
@@ -285,6 +302,148 @@ unsigned long long import_problem(Database& db, const ProblemData& data,
         throw std::runtime_error("failed to update test_dir: " + db.error());
     }
     return id;
+}
+
+// ---------- 题目查询（阶段 4） ----------
+
+// 构建可见性过滤的 SQL 片段与参数绑定。
+// 返回 true 表示直接放行（教师/管理员/空实现），
+// false 表示按学生规则过滤（由调用方决定是否返回空）。
+static bool is_staff_view(const std::string& role) {
+    return role == "teacher" || role == "admin";
+}
+
+static std::string student_visibility_sql() {
+    // 学生可见：本班教师发布的题目 + 全局题（created_by IS NULL 且已入班）
+    return " (p.created_by IS NULL AND EXISTS "
+           "     (SELECT 1 FROM class_members cm WHERE cm.student_id = ?)) "
+           " OR p.created_by IN "
+           "     (SELECT c.teacher_id FROM classes c "
+           "      JOIN class_members cm ON cm.class_id = c.id "
+           "      WHERE cm.student_id = ?) ";
+}
+
+bool query_problem_list(Database& db, unsigned int user_id,
+                        const std::string& role, Json::Value& out) {
+    if (!is_staff_view(role) && user_id == 0) {
+        // 未登录学生：空列表
+        out["problems"] = Json::Value(Json::arrayValue);
+        return true;
+    }
+
+    std::string sql;
+    if (is_staff_view(role)) {
+        sql = "SELECT p.id, p.title, p.difficulty, "
+              "       COUNT(s.id) AS submit_count, "
+              "       COALESCE(SUM(s.status = 'AC'), 0) AS ac_count "
+              "FROM problems p "
+              "LEFT JOIN submissions s ON s.problem_id = p.id "
+              "GROUP BY p.id ORDER BY p.id";
+    } else {
+        sql = "SELECT p.id, p.title, p.difficulty, "
+              "       COUNT(s.id) AS submit_count, "
+              "       COALESCE(SUM(s.status = 'AC'), 0) AS ac_count "
+              "FROM problems p "
+              "LEFT JOIN submissions s ON s.problem_id = p.id "
+              "WHERE" + student_visibility_sql() +
+              "GROUP BY p.id ORDER BY p.id";
+    }
+    auto q = is_staff_view(role)
+                 ? db.query(sql)
+                 : db.query(sql, user_id, user_id);
+    if (!q) {
+        return false;
+    }
+
+    // 登录用户的每题状态：AC（有 AC 提交）/ attempted（仅非 AC 提交）
+    std::map<unsigned long long, bool> my_ac;
+    std::map<unsigned long long, bool> my_submitted;
+    if (user_id > 0) {
+        auto mine = db.query(
+            "SELECT problem_id, MAX(status = 'AC') AS has_ac "
+            "FROM submissions WHERE user_id = ? GROUP BY problem_id",
+            user_id);
+        if (!mine) {
+            return false;
+        }
+        for (unsigned long long r = 0; r < mine->row_count(); ++r) {
+            const auto pid = mine->cell(r, 0).as_uint64();
+            my_ac[pid] = mine->cell(r, 1).as_bool();
+            my_submitted[pid] = true;
+        }
+    }
+
+    Json::Value arr(Json::arrayValue);
+    for (unsigned long long r = 0; r < q->row_count(); ++r) {
+        Json::Value item;
+        item["id"] = q->cell(r, 0).as_uint();
+        item["title"] = q->cell(r, 1).as_string();
+        item["difficulty"] = q->cell(r, 2).as_int();
+        const unsigned long long submit = q->cell(r, 3).as_uint64();
+        const unsigned long long ac = q->cell(r, 4).as_uint64();
+        item["submit_count"] = static_cast<Json::UInt64>(submit);
+        item["pass_rate"] =
+            submit > 0 ? static_cast<int>((ac * 100.0) / submit + 0.5) : 0;
+
+        const auto pid = item["id"].asUInt64();
+        if (user_id > 0) {
+            if (my_ac[pid]) {
+                item["my_status"] = "AC";
+            } else if (my_submitted[pid]) {
+                item["my_status"] = "attempted";
+            } else {
+                item["my_status"] = "not_started";
+            }
+        } else {
+            item["my_status"] = Json::Value(Json::nullValue);
+        }
+        arr.append(item);
+    }
+    out["problems"] = arr;
+    return true;
+}
+
+bool query_problem_detail(Database& db, unsigned int id, unsigned int user_id,
+                          const std::string& role, Json::Value& out) {
+    std::string sql;
+    if (is_staff_view(role)) {
+        sql = "SELECT id, title, description, sample_in, sample_out, "
+              "       time_limit_ms, memory_limit_mb, difficulty "
+              "FROM problems WHERE id = ?";
+    } else if (user_id > 0) {
+        sql = "SELECT id, title, description, sample_in, sample_out, "
+              "       time_limit_ms, memory_limit_mb, difficulty "
+              "FROM problems p WHERE id = ? AND ("
+              "  p.created_by IS NULL AND EXISTS "
+              "    (SELECT 1 FROM class_members cm WHERE cm.student_id = ?)"
+              "  OR p.created_by IN "
+              "    (SELECT c.teacher_id FROM classes c "
+              "     JOIN class_members cm ON cm.class_id = c.id "
+              "     WHERE cm.student_id = ?)"
+              ")";
+    } else {
+        return false;  // 未登录不可见
+    }
+    auto q = is_staff_view(role)
+                 ? db.query(sql, id)
+                 : db.query(sql, id, user_id, user_id);
+    if (!q) {
+        return false;
+    }
+    if (q->row_count() == 0) {
+        return false;
+    }
+    Json::Value item;
+    item["id"] = q->cell(0, 0).as_uint();
+    item["title"] = q->cell(0, 1).as_string();
+    item["description"] = q->cell(0, 2).as_string();
+    item["sample_in"] = q->cell(0, 3).as_string();
+    item["sample_out"] = q->cell(0, 4).as_string();
+    item["time_limit_ms"] = q->cell(0, 5).as_uint();
+    item["memory_limit_mb"] = q->cell(0, 6).as_uint();
+    item["difficulty"] = q->cell(0, 7).as_int();
+    out["problem"] = item;
+    return true;
 }
 
 } // namespace oj

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>题目列表 - OJ Vibecoding</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav id="main-nav"></nav>
+  <div class="container">
+    <div class="card">
+      <h1 class="page-title">题目列表</h1>
+      <div id="alert" class="alert"></div>
+
+      <div class="panel" id="join-panel">
+        <h2>加入班级</h2>
+        <p class="muted">输入教师分享的邀请码，加入后即可看到本班题目。</p>
+        <form id="join-form">
+          <div class="form-group join-row">
+            <input type="text" id="invite-code" name="invite-code"
+                   placeholder="请输入邀请码" maxlength="32" required>
+            <button type="submit" id="join-btn" class="btn">加入</button>
+          </div>
+        </form>
+        <div id="my-class"></div>
+      </div>
+
+      <table class="table" id="problem-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>标题</th>
+            <th>难度</th>
+            <th>提交 / 通过率</th>
+            <th>我的状态</th>
+          </tr>
+        </thead>
+        <tbody id="problem-body"></tbody>
+      </table>
+      <p id="empty-hint" class="muted" style="display:none;">
+        暂无可见题目。加入教师班级后可见本班题目。
+      </p>
+    </div>
+  </div>
+  <script src="/js/common.js"></script>
+  <script src="/js/problems.js"></script>
+</body>
+</html>

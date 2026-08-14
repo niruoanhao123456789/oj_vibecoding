@@ -13,13 +13,14 @@
 
 | 角色 | 能力 |
 |---|---|
-| 学生 | 浏览题目、提交代码、查看判题结果/历史/个人统计 |
-| 教师 | 学生能力 + 增改删题、JSON 导入题目、查看提交统计、导出 CSV |
+| 学生 | 凭邀请码加入教师班级、浏览本班可见题目、提交代码、查看判题结果/历史/个人统计 |
+| 教师 | 学生能力 + 创建班级/生成邀请码、增改删题、JSON 导入题目、查看提交统计、导出 CSV |
 | 管理员 | 教师能力 + 用户管理（增删改、角色调整）、管理测试用例与系统配置 |
 
 ## 3. 核心业务规则
 
-- **题目**：初始 ≤10 题，JSON 文件导入；每题的隐藏测试点与学生可见样例分离。
+- **题目**：初始 ≤10 题，JSON 文件导入；每题的隐藏测试点与学生可见样例分离。题目按班级隔离，可见性见 4.8。
+- **班级**：一名教师一个班级，教师生成班级邀请码；学生凭邀请码加入后可见该教师发布的题目（及全局题）。
 - **判题**：仅支持 C++ 与 C（g++ / gcc），不支持 Java、Python。异步判题：提交 → PENDING → 2-4 个 worker 并发判 → 结果入库 → 前端轮询。
 - **判题限制**：CPU 时间上限、内存上限、总超时；超限判 TLE/MLE。
 - **输出比对**：宽松比较（忽略全部空白与空行）。
@@ -60,6 +61,7 @@
 | sample_out | TEXT | NOT NULL | 学生可见样例输出 |
 | time_limit_ms | INT UNSIGNED | NOT NULL, DEFAULT 1000 | 单测试点 CPU 时限（毫秒） |
 | memory_limit_mb | INT UNSIGNED | NOT NULL, DEFAULT 256 | 单测试点内存上限（MB） |
+| difficulty | TINYINT UNSIGNED | NOT NULL, DEFAULT 1 | 难度 1 简单 / 2 中等 / 3 困难 |
 | test_dir | VARCHAR(255) | NOT NULL | 隐藏测试点目录路径（相对/绝对） |
 | created_by | INT UNSIGNED | NULL, FK → users(id) | 创建人（教师/管理员） |
 | created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP | 创建时间 |
@@ -81,14 +83,45 @@
 | error_message | TEXT | NULL | 编译错误/首个失败点详情 |
 | created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP | 提交时间 |
 
-### 4.5 索引与约束
+### 4.5 classes — 班级表
+
+| 字段 | 类型 | 约束/默认 | 说明 |
+|---|---|---|---|
+| id | INT UNSIGNED | 自增主键 | 班级 ID |
+| teacher_id | INT UNSIGNED | NOT NULL, UNIQUE, FK → users(id) | 班级教师（一名教师一个班） |
+| name | VARCHAR(64) | NOT NULL, DEFAULT '默认班级' | 班级名 |
+| invite_code | VARCHAR(32) | NOT NULL, UNIQUE | 班级邀请码（学生凭此加入） |
+| created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP | 创建时间 |
+
+### 4.6 class_members — 班级成员表
+
+| 字段 | 类型 | 约束/默认 | 说明 |
+|---|---|---|---|
+| class_id | INT UNSIGNED | NOT NULL, FK → classes(id) | 所属班级 |
+| student_id | INT UNSIGNED | NOT NULL, FK → users(id) | 学生用户 |
+| joined_at | DATETIME | DEFAULT CURRENT_TIMESTAMP | 加入时间 |
+
+主键 `(class_id, student_id)`；学生可加入多个教师的班级，每个班级内唯一。
+
+### 4.7 索引与约束
 
 - `users.username` UNIQUE；`users.role` 普通索引。
 - `sessions.token` 主键；`sessions.user_id` 索引 + 外键。
 - `problems.title` UNIQUE。
 - `submissions` 索引：`(user_id)`、`(problem_id)`、`(status)`、`(user_id, created_at)`；`problem_id`/`user_id` 外键。
+- `classes.teacher_id` UNIQUE（一名教师一个班）；`classes.invite_code` UNIQUE。
+- `class_members` 主键 `(class_id, student_id)`；`student_id` 普通索引；`class_id`/`student_id` 外键。
 
-### 4.6 题目 JSON 格式（导入源）
+### 4.8 题目可见性规则
+
+题目按班级隔离：
+- **教师/管理员**：可查看全部题目。
+- **学生**：仅可查看「本人加入班级的教师发布的题目」与「全局题目」（`created_by` 为 NULL，如 `oj_import` 导入的题）。未加入任何班级的学生题目列表为空。
+- **未登录**：题目列表为空。
+
+全局题对任何已入班学生可见；入班学生通过教师发布的邀请码加入班级。
+
+### 4.9 题目 JSON 格式（导入源）
 
 每个题目一个 JSON 文件，由 `oj_import` 导入器解析校验后写入 `problems` 表，
 隐藏测试点落盘到 `data/problems/<problem_id>/`（`{编号}.in` / `{编号}.out` 成对文件）。
@@ -101,6 +134,7 @@
 | sample_out | string | 是 | — | 学生可见样例输出 |
 | time_limit_ms | int | 否 | 1000 | 单测试点 CPU 时限（毫秒，>0） |
 | memory_limit_mb | int | 否 | 256 | 单测试点内存上限（MB，>0） |
+| difficulty | int | 否 | 1 | 难度：1 简单 / 2 中等 / 3 困难（取值 1-3） |
 | test_dir | string | 二选一 | — | 引用外部测试点目录（相对 JSON 所在目录解析或绝对路径） |
 | test_cases | array | 二选一 | — | 内联测试点数组，与 `test_dir` 互斥 |
 
@@ -152,9 +186,10 @@
 ## 5. API 边界（REST JSON，/api 前缀）
 
 - 认证：`POST /api/register` `POST /api/login` `POST /api/logout` `GET /api/me`
-- 题目：`GET /api/problems` `GET /api/problems/:id`
+- 题目：`GET /api/problems` `GET /api/problems/:id`（按 4.8 可见性规则过滤）
+- 班级：`POST /api/class/join`（学生凭邀请码加入班级）
 - 提交：`POST /api/submissions`（参数含 `language`，仅接受 `cpp`/`c`）`GET /api/submissions?user_id=` `GET /api/submissions/:id`（轮询判题状态）
-- 教师：`POST /api/admin/problems/import` `PUT/DELETE /api/admin/problems/:id` `GET /api/admin/stats` `GET /api/admin/submissions/export.csv`
+- 教师/管理员：`GET/POST /api/admin/class` `POST /api/admin/class/invite` `POST /api/admin/problems/import` `PUT/DELETE /api/admin/problems/:id` `GET /api/admin/stats` `GET /api/admin/submissions/export.csv`
 - 管理员：`GET/PUT /api/admin/users` `GET/PUT /api/admin/config`
 
 ## 6. 架构图
@@ -186,7 +221,7 @@ oj_vibecoding/
 ├── config/
 │   └── server.json                # 服务配置（端口/DB/worker 数/路径）
 ├── sql/
-│   ├── schema.sql                 # 建表脚本（4 张表 + 索引 + 初始账号）
+│   ├── schema.sql                 # 建表脚本（6 张表 + 索引 + 初始账号）
 │   └── init.sh                    # 初始化数据库辅助脚本
 ├── src/
 │   ├── main.cpp                   # 程序入口，路由注册与启动
@@ -196,6 +231,7 @@ oj_vibecoding/
 │   ├── db.h / db.cpp              # MySQL 访问层（参数化查询）
 │   ├── problem.h / problem.cpp    # 题目 JSON 格式解析 + 导入器
 │   ├── auth.h / auth.cpp          # 注册/登录/登出/Session 中间件
+│   ├── ojclass.h / ojclass.cpp    # 班级管理（建班/邀请码/学生入班/可见性）
 │   ├── submission.h / submission.cpp  # 提交 API + 轮询查询
 │   ├── judge/
 │   │   ├── compiler.h / compiler.cpp  # g++/gcc 编译模块（C++/C）
@@ -262,9 +298,10 @@ oj_vibecoding/
 - 默认注册为「学生」角色；注册成功自动跳转登录页。
 
 ### 7.3 题目列表页
-- 展示全部题目：题号、标题、难度、提交数 / 通过率。
+- 展示可见题目：题号、标题、难度、提交数 / 通过率。
 - 已登录用户展示本人每题的状态徽标（AC / 尝试中 / 未作答）。
 - 支持按难度筛选与标题搜索；点击题目进入详情。
+- 学生端显示「加入班级」入口：输入教师邀请码加入班级，加入后方可看到对应教师的题目与全局题目。
 
 ### 7.4 题目详情页
 - 左侧：题目描述、输入/输出格式、数据范围、学生可见样例（输入/输出）。
@@ -284,6 +321,7 @@ oj_vibecoding/
 
 ### 7.8 后端管理页面
 - **教师管理端**：
+  - 班级管理：创建班级、查看/重置班级邀请码、查看班级成员列表。
   - 题目管理：JSON 导入题目（含样例与隐藏测试点）、题目列表 CRUD（编辑、删除）。
   - 统计查看：各题提交数、AC 率、学生提交情况。
   - 提交记录导出：按题目/用户导出 CSV。
@@ -297,7 +335,7 @@ oj_vibecoding/
 
 ## 9. 边缘与异常
 
-空提交/超长代码、提交 Java/Python 等非 C/C++ 代码（拒绝并返回明确错误）、编译错误消息展示、判题 worker 崩溃、测试点文件缺失、导入非法 JSON、重复题目 title、Session 过期、并发提交 → 均返回明确错误码并记录日志。
+空提交/超长代码、提交 Java/Python 等非 C/C++ 代码（拒绝并返回明确错误）、编译错误消息展示、判题 worker 崩溃、测试点文件缺失、导入非法 JSON、重复题目 title、Session 过期、并发提交、无效班级邀请码、重复加入班级、学生访问教师/管理员接口（403）→ 均返回明确错误码并记录日志。
 
 ## 10. TODO 清单
 
@@ -309,7 +347,7 @@ oj_vibecoding/
 - [x] 验证：`cmake && make` 编译通过；启动后 `GET /` 返回静态首页；DB 连接成功
 
 ### 阶段 2：数据层
-- [x] 编写 `sql/schema.sql`：按第 4 章建 4 张表 + 索引 + 外键 + 初始管理员账号
+- [x] 编写 `sql/schema.sql`：按第 4 章建 6 张表 + 索引 + 外键 + 初始管理员账号
 - [x] 封装 DB 访问层（`db.*`）：连接管理、参数化查询辅助函数
 - [x] 定义题目 JSON 格式（title/description/sample_in/sample_out/time_limit_ms/memory_limit_mb/test_cases 或 test_dir 引用），见 4.6 节
 - [x] 编写 JSON 题目导入器（`problem.*`）：解析 JSON、校验字段、写 problems 表、将隐藏测试点写入 `test_dir`；命令行工具 `tools/oj_import.cpp` + `scripts/import_problem.sh`
@@ -317,25 +355,25 @@ oj_vibecoding/
 
 ### 阶段 3：登录注册模块（认证）
 **后端**
-- [ ] `POST /api/register`：校验用户名唯一性、长度与字符合法性，校验密码长度，写入 users 表（默认 student 角色）
-- [ ] `POST /api/login`：查询用户、校验密码，生成随机 token 写入 sessions，`Set-Cookie` 返回会话
-- [ ] `POST /api/logout`：删除会话并清除 Cookie
-- [ ] `GET /api/me`：凭 Cookie 返回当前用户信息（id/用户名/角色）
-- [ ] Session 中间件：从 Cookie 解析 token、校验未过期、注入请求上下文；无有效会话时返回 401
-- [ ] 错误码与提示规范：用户名已存在 / 用户名或密码错误 / 参数非法 等，返回统一 JSON 结构
-- [ ] 验证：注册→登录→访问受保护接口→登出 全流程 curl 通过
+- [x] `POST /api/register`：校验用户名唯一性、长度与字符合法性，校验密码长度，写入 users 表（默认 student 角色）
+- [x] `POST /api/login`：查询用户、校验密码，生成随机 token 写入 sessions，`Set-Cookie` 返回会话
+- [x] `POST /api/logout`：删除会话并清除 Cookie
+- [x] `GET /api/me`：凭 Cookie 返回当前用户信息（id/用户名/角色）
+- [x] Session 中间件：从 Cookie 解析 token、校验未过期、注入请求上下文；无有效会话时返回 401
+- [x] 错误码与提示规范：用户名已存在 / 用户名或密码错误 / 参数非法 等，返回统一 JSON 结构
+- [x] 验证：注册→登录→访问受保护接口→登出 全流程 curl 通过（`tests/api/test_auth.sh` 14 项断言）
 
 **前端**
-- [ ] 登录页：用户名/密码表单、错误提示展示、回车提交、登录成功跳转题目列表页
-- [ ] 注册页：用户名/密码/确认密码表单，前端校验（非空、两次密码一致、用户名与密码长度），注册成功跳转登录页，错误提示展示
-- [ ] 公共登录态：导航栏根据 `GET /api/me` 展示登录/注册入口或用户名+登出按钮
-- [ ] 验证：浏览器手动完成注册→登录→登出，错误场景提示正确
+- [x] 登录页：用户名/密码表单、错误提示展示、回车提交、登录成功跳转题目列表页
+- [x] 注册页：用户名/密码/确认密码表单，前端校验（非空、两次密码一致、用户名与密码长度），注册成功跳转登录页，错误提示展示
+- [x] 公共登录态：导航栏根据 `GET /api/me` 展示登录/注册入口或用户名+登出按钮
+- [x] 验证：浏览器手动完成注册→登录→登出，错误场景提示正确
 
 ### 阶段 4：题目 API + 静态托管
-- [ ] `GET /api/problems`：列表（题号/标题/难度/提交数/通过率/本人状态）
-- [ ] `GET /api/problems/:id`：详情（描述/样例，不含隐藏测试点）
-- [ ] cpp-httplib 注册静态目录处理器，托管 `frontend/`
-- [ ] 验证：curl 可查列表与详情；浏览器可加载前端资源
+- [x] `GET /api/problems`：列表（题号/标题/难度/提交数/通过率/本人状态）
+- [x] `GET /api/problems/:id`：详情（描述/样例，不含隐藏测试点）
+- [x] cpp-httplib 注册静态目录处理器，托管 `frontend/`
+- [x] 验证：curl 可查列表与详情；浏览器可加载前端资源
 
 ### 阶段 5：判题引擎
 - [ ] 编译模块：C++ 用 `g++ -O2 -std=c++17`、C 用 `gcc -O2 -std=c11` 编译到临时目录，捕获编译错误输出，编译超时处理
@@ -362,12 +400,14 @@ oj_vibecoding/
 - [ ] 验证：全页面在浏览器手动走通完整流程
 
 ### 阶段 8：管理端
+- [ ] 教师班级管理：创建班级、生成/重置邀请码、查看成员（`GET/POST /api/admin/class`、`POST /api/admin/class/invite`）
+- [ ] 学生加入班级：`POST /api/class/join`（凭邀请码）；题目可见性按 4.8 规则过滤
 - [ ] 教师题目管理页：JSON 导入表单、题目列表（编辑/删除）
 - [ ] 教师统计页 + CSV 导出（`GET /api/admin/submissions/export.csv`）
 - [ ] `POST /api/admin/problems/import`、`PUT/DELETE /api/admin/problems/:id`
 - [ ] 管理员用户管理页：用户列表/新增/禁用/删除/角色调整
 - [ ] 管理员配置页：判题限制（时间/内存上限）、测试用例维护
-- [ ] 验证：教师导入→题目立即可见；管理员调整角色生效
+- [ ] 验证：教师建班→学生凭邀请码入班→学生可见该师题目；未入班学生列表为空；学生访问管理接口返回 403
 
 ### 阶段 9：日志 + 测试
 - [ ] 统一日志模块：记录启动、请求、判题事件、错误；按天滚动
@@ -380,5 +420,6 @@ oj_vibecoding/
 - 完整闭环：注册 → 登录 → 选题 → 提交 → 轮询看到 AC/WA/TLE/MLE/CE → 历史列表 → 个人统计，全链路可演示。
 - 至少 2 题含多组隐藏测试点，能正确判出 AC 与 WA；构造超时/超内存样例能判 TLE/MLE；错误语法判 CE。
 - 教师可通过 JSON 导入题目并立即可见；学生无权访问管理接口（返回 403）。
+- 教师创建班级并生成邀请码，学生凭邀请码加入后可见该教师题目；未入班学生题目列表为空。
 - 2-4 worker 并发下 30 人规模提交无串号、无结果丢失；判题进程崩溃后提交标记 SYSTEM_ERROR。
 - 宽松比较：行尾空格/空行差异不影响 AC。

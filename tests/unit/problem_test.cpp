@@ -10,6 +10,7 @@
 
 #include <unistd.h>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -17,6 +18,7 @@
 
 #include "config.h"
 #include "db.h"
+#include "ojclass.h"
 #include "problem.h"
 #include "test_util.h"
 
@@ -240,6 +242,46 @@ TEST(ProblemParseTest, RelativeTestDirResolvedAgainstJsonDir) {
     EXPECT_EQ(d.src_test_dir, sub + "/tests");
 }
 
+TEST(ProblemParseTest, DifficultyParsedAndDefaulted) {
+    // 缺省为 1
+    std::string path = write_json(R"({
+        "title": "D1", "description": "d", "sample_in": "", "sample_out": "",
+        "test_cases": [{"input": "", "output": ""}]
+    })");
+    EXPECT_EQ(oj::parse_problem_json(path).difficulty, 1);
+    clean();
+
+    // 显式指定
+    path = write_json(R"({
+        "title": "D2", "description": "d", "sample_in": "", "sample_out": "",
+        "difficulty": 3,
+        "test_cases": [{"input": "", "output": ""}]
+    })");
+    EXPECT_EQ(oj::parse_problem_json(path).difficulty, 3);
+    clean();
+}
+
+TEST(ProblemParseTest, InvalidDifficultyThrows) {
+    for (const char* bad : {"0", "4", "-1"}) {
+        std::string path = write_json(
+            std::string("{\"title\":\"DX\",\"description\":\"d\","
+                        "\"sample_in\":\"\",\"sample_out\":\"\","
+                        "\"difficulty\":") + bad +
+            ",\"test_cases\":[{\"input\":\"\",\"output\":\"\"}]}");
+        EXPECT_THROW(oj::parse_problem_json(path), std::runtime_error)
+            << "difficulty=" << bad;
+        clean();
+    }
+    // 非整数类型
+    std::string path = write_json(R"({
+        "title": "DX", "description": "d", "sample_in": "", "sample_out": "",
+        "difficulty": "hard",
+        "test_cases": [{"input": "", "output": ""}]
+    })");
+    EXPECT_THROW(oj::parse_problem_json(path), std::runtime_error);
+    clean();
+}
+
 // ---------- 导入集成测试（需 MySQL） ----------
 
 class ProblemImportTest : public ::testing::Test {
@@ -443,6 +485,161 @@ TEST_F(ProblemImportTest, ImportRespectsLimitsAndCreator) {
     EXPECT_EQ(row->cell(0, 0).as_uint(), 500U);
     EXPECT_EQ(row->cell(0, 1).as_uint(), 64U);
     EXPECT_EQ(row->cell(0, 2).as_uint64(), uid);
+}
+
+// ---------- 题目可见性集成测试（SPEC 4.8） ----------
+
+class ProblemVisibilityTest : public ::testing::Test {
+protected:
+    void SetUp() override {
+        cfg_ = oj::load_config(oj_test::source_root() + "/config/server.json");
+        if (!db_.connect(cfg_)) {
+            GTEST_SKIP() << "MySQL 连接失败，跳过可见性集成测试";
+        }
+        auto chk = db_.query(
+            "SELECT COUNT(*) FROM information_schema.tables "
+            "WHERE table_schema = ? AND table_name IN ('classes','class_members')",
+            cfg_.db_name);
+        if (!chk || chk->cell(0, 0).as_uint64() != 2) {
+            GTEST_SKIP() << "数据库缺少 classes/class_members 表，跳过可见性测试";
+        }
+        cleanup();
+
+        // 教师 + 两个学生 + 班级
+        teacher_ = insert_user("ut_vis_teacher", "teacher");
+        student_in_ = insert_user("ut_vis_stu_in", "student");
+        student_out_ = insert_user("ut_vis_stu_out", "student");
+
+        Json::Value created;
+        ASSERT_TRUE(oj::create_class(db_, teacher_, "vis class", created));
+        class_id_ = created["class"]["id"].asUInt();
+        invite_ = created["class"]["invite_code"].asString();
+
+        std::string err_code, err_msg;
+        Json::Value joined;
+        ASSERT_TRUE(
+            oj::join_class(db_, student_in_, invite_, err_code, err_msg, joined));
+
+        // 教师发布的题目
+        teacher_problem_ = insert_problem("ut_vis_teacher_prob", teacher_);
+        // 全局题（created_by NULL）
+        global_problem_ = insert_problem("ut_vis_global_prob", 0);
+    }
+
+    void TearDown() override {
+        cleanup();
+        db_.close();
+    }
+
+    void cleanup() {
+        db_.execute(
+            "DELETE FROM submissions WHERE user_id IN "
+            "(SELECT id FROM users WHERE username LIKE 'ut_vis_%')");
+        db_.execute(
+            "DELETE FROM problems WHERE created_by IN "
+            "(SELECT id FROM users WHERE username LIKE 'ut_vis_%') "
+            "OR title LIKE 'ut_vis_%'");
+        db_.execute("DELETE FROM users WHERE username LIKE 'ut_vis_%'");
+    }
+
+    unsigned long long insert_user(const std::string& name,
+                                   const std::string& role) {
+        auto st = db_.prepare(
+            "INSERT INTO users (username, password, role) VALUES (?, ?, ?)");
+        st->bind(name).bind("secret").bind(role);
+        EXPECT_TRUE(st->execute()) << st->error();
+        return st->last_insert_id();
+    }
+
+    unsigned long long insert_problem(const std::string& title,
+                                      unsigned long long created_by) {
+        auto st = db_.prepare(
+            "INSERT INTO problems (title, description, sample_in, sample_out, "
+            "test_dir, created_by) VALUES (?, ?, '', '', '/tmp/ut', ?)");
+        st->bind(title).bind("desc");
+        if (created_by == 0) {
+            st->bind_null();
+        } else {
+            st->bind(created_by);
+        }
+        EXPECT_TRUE(st->execute()) << st->error();
+        return st->last_insert_id();
+    }
+
+    std::vector<std::string> visible_titles(unsigned int uid,
+                                            const std::string& role) {
+        Json::Value out;
+        EXPECT_TRUE(oj::query_problem_list(db_, uid, role, out));
+        std::vector<std::string> titles;
+        for (const auto& p : out["problems"]) {
+            titles.push_back(p["title"].asString());
+        }
+        std::sort(titles.begin(), titles.end());
+        return titles;
+    }
+
+    bool detail_visible(unsigned int id, unsigned int uid,
+                        const std::string& role) {
+        Json::Value out;
+        return oj::query_problem_detail(db_, id, uid, role, out);
+    }
+
+    oj::Config cfg_;
+    oj::Database db_;
+    unsigned long long teacher_ = 0;
+    unsigned long long student_in_ = 0;
+    unsigned long long student_out_ = 0;
+    unsigned int class_id_ = 0;
+    std::string invite_;
+    unsigned long long teacher_problem_ = 0;
+    unsigned long long global_problem_ = 0;
+};
+
+TEST_F(ProblemVisibilityTest, TeacherSeesAllProblems) {
+    auto titles = visible_titles(teacher_, "teacher");
+    EXPECT_NE(std::find(titles.begin(), titles.end(), "ut_vis_teacher_prob"),
+              titles.end());
+    EXPECT_NE(std::find(titles.begin(), titles.end(), "ut_vis_global_prob"),
+              titles.end());
+}
+
+TEST_F(ProblemVisibilityTest, AdminSeesAllProblems) {
+    auto titles = visible_titles(teacher_, "admin");
+    EXPECT_NE(std::find(titles.begin(), titles.end(), "ut_vis_teacher_prob"),
+              titles.end());
+    EXPECT_NE(std::find(titles.begin(), titles.end(), "ut_vis_global_prob"),
+              titles.end());
+}
+
+TEST_F(ProblemVisibilityTest, JoinedStudentSeesTeacherAndGlobal) {
+    auto titles = visible_titles(student_in_, "student");
+    EXPECT_NE(std::find(titles.begin(), titles.end(), "ut_vis_teacher_prob"),
+              titles.end());
+    EXPECT_NE(std::find(titles.begin(), titles.end(), "ut_vis_global_prob"),
+              titles.end());
+}
+
+TEST_F(ProblemVisibilityTest, UnjoinedStudentSeesNothing) {
+    auto titles = visible_titles(student_out_, "student");
+    EXPECT_EQ(titles.size(), 0u);
+}
+
+TEST_F(ProblemVisibilityTest, AnonymousSeesNothing) {
+    auto titles = visible_titles(0, "");
+    EXPECT_EQ(titles.size(), 0u);
+}
+
+TEST_F(ProblemVisibilityTest, DetailVisibleToTeacherAndJoinedStudent) {
+    EXPECT_TRUE(detail_visible(teacher_problem_, teacher_, "teacher"));
+    EXPECT_TRUE(detail_visible(global_problem_, teacher_, "admin"));
+    EXPECT_TRUE(detail_visible(teacher_problem_, student_in_, "student"));
+    EXPECT_TRUE(detail_visible(global_problem_, student_in_, "student"));
+}
+
+TEST_F(ProblemVisibilityTest, DetailHiddenFromUnjoinedAndAnonymous) {
+    EXPECT_FALSE(detail_visible(teacher_problem_, student_out_, "student"));
+    EXPECT_FALSE(detail_visible(teacher_problem_, 0, ""));
+    EXPECT_FALSE(detail_visible(global_problem_, 0, ""));
 }
 
 } // namespace

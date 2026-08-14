@@ -106,4 +106,118 @@ TEST_F(ServerTest, NonexistentStaticFileReturns404) {
     EXPECT_EQ(res->status, 404);
 }
 
+// 登录管理员并返回携带会话的 Client（管理员可见全部题目）。
+// cpp-httplib Client 不自动持久化 Cookie，需从登录响应提取后带上。
+httplib::Client login_admin(const std::string& base, std::string& cookie) {
+    httplib::Client cli(base);
+    const std::string body =
+        "{\"username\":\"admin\",\"password\":\"admin123\"}";
+    auto res = cli.Post("/api/login",
+                        {{"Content-Type", "application/json"}},
+                        body, "application/json");
+    if (res) {
+        cookie = res->get_header_value("Set-Cookie");
+    }
+    return cli;
+}
+
+TEST_F(ServerTest, ProblemListReturnsProblems) {
+    std::string cookie;
+    httplib::Client cli = login_admin(base_url(), cookie);
+    auto res = cli.Get("/api/problems", {{"Cookie", cookie}});
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_NE(res->body.find("\"ok\":true"), std::string::npos);
+    EXPECT_NE(res->body.find("\"problems\":"), std::string::npos);
+    EXPECT_NE(res->body.find("\"difficulty\""), std::string::npos);
+    EXPECT_NE(res->body.find("\"submit_count\""), std::string::npos);
+    EXPECT_NE(res->body.find("\"pass_rate\""), std::string::npos);
+    EXPECT_NE(res->body.find("\"my_status\""), std::string::npos);
+}
+
+TEST_F(ServerTest, AnonymousProblemListEmpty) {
+    httplib::Client cli(base_url());
+    auto res = cli.Get("/api/problems");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_NE(res->body.find("\"problems\":[]"), std::string::npos);
+}
+
+TEST_F(ServerTest, ProblemDetailExistsAndNoTestDir) {
+    std::string cookie;
+    httplib::Client cli = login_admin(base_url(), cookie);
+    auto list = cli.Get("/api/problems", {{"Cookie", cookie}});
+    ASSERT_TRUE(list);
+    // 解析第一个题目 id（{"id":123,...}）
+    const std::string key = "\"id\":";
+    size_t pos = list->body.find(key);
+    ASSERT_NE(pos, std::string::npos);
+    const std::string id = list->body.substr(pos + key.size());
+    pos = id.find_first_not_of("0123456789");
+    const std::string pid = pos == std::string::npos ? id : id.substr(0, pos);
+    ASSERT_FALSE(pid.empty());
+
+    auto res = cli.Get("/api/problems/" + pid, {{"Cookie", cookie}});
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_NE(res->body.find("\"description\""), std::string::npos);
+    EXPECT_NE(res->body.find("\"sample_in\""), std::string::npos);
+    EXPECT_EQ(res->body.find("\"test_dir\""), std::string::npos);
+}
+
+TEST_F(ServerTest, ProblemDetailNotFound404) {
+    std::string cookie;
+    httplib::Client cli = login_admin(base_url(), cookie);
+    auto res = cli.Get("/api/problems/99999999", {{"Cookie", cookie}});
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404);
+    EXPECT_NE(res->body.find("PROBLEM_NOT_FOUND"), std::string::npos);
+}
+
+TEST_F(ServerTest, ClassEndpointRequiresStaff) {
+    std::string cookie;
+    httplib::Client cli = login_admin(base_url(), cookie);
+    auto res = cli.Get("/api/admin/class", {{"Cookie", cookie}});
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 200);
+    EXPECT_NE(res->body.find("\"ok\":true"), std::string::npos);
+}
+
+TEST_F(ServerTest, ClassCreateAndView) {
+    std::string cookie;
+    httplib::Client cli = login_admin(base_url(), cookie);
+    auto created = cli.Post("/api/admin/class",
+                            {{"Content-Type", "application/json"},
+                             {"Cookie", cookie}},
+                            "{\"name\":\"smoke class\"}",
+                            "application/json");
+    ASSERT_TRUE(created);
+    EXPECT_EQ(created->status, 200);
+    EXPECT_NE(created->body.find("\"invite_code\""), std::string::npos);
+
+    auto viewed = cli.Get("/api/admin/class", {{"Cookie", cookie}});
+    ASSERT_TRUE(viewed);
+    EXPECT_EQ(viewed->status, 200);
+    EXPECT_NE(viewed->body.find("\"members\""), std::string::npos);
+}
+
+TEST_F(ServerTest, StudentCannotAccessStaffClass) {
+    // 注册并登录学生（未入班），访问教师接口应 403
+    httplib::Client cli(base_url());
+    const std::string body =
+        "{\"username\":\"class_forbid_stu\",\"password\":\"pass123\"}";
+    cli.Post("/api/register",
+             {{"Content-Type", "application/json"}},
+             body, "application/json");
+    auto login = cli.Post("/api/login",
+                          {{"Content-Type", "application/json"}},
+                          body, "application/json");
+    ASSERT_TRUE(login);
+    const std::string cookie = login->get_header_value("Set-Cookie");
+    auto res = cli.Get("/api/admin/class", {{"Cookie", cookie}});
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 403);
+    EXPECT_NE(res->body.find("FORBIDDEN"), std::string::npos);
+}
+
 } // namespace

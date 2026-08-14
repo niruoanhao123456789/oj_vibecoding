@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>管理 - OJ Vibecoding</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav id="main-nav"></nav>
+  <div class="container">
+    <div class="card">
+      <h1 class="page-title">管理</h1>
+      <div id="alert" class="alert"></div>
+
+      <div class="panel" id="class-panel">
+        <h2>班级管理</h2>
+        <div id="class-info"></div>
+        <form id="class-form">
+          <div class="form-group">
+            <label for="class-name">班级名称</label>
+            <input type="text" id="class-name" name="class-name"
+                   placeholder="默认班级" maxlength="64">
+          </div>
+          <button type="submit" id="class-submit" class="btn">创建 / 查看班级</button>
+        </form>
+        <div style="margin-top:16px;">
+          <button type="button" id="invite-btn" class="btn" style="background:var(--danger);">重置邀请码</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/js/common.js"></script>
+  <script src="/js/admin.js"></script>
+</body>
+</html>
