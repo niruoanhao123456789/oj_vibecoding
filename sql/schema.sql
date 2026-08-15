@@ -100,6 +100,9 @@ CREATE TABLE IF NOT EXISTS class_members (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- 初始管理员账号（幂等：已存在则跳过）
+-- 密码按 "<盐>:<sha256(密码+盐)>" 存储，admin 密码为 admin123（盐固定 1723700000）。
 INSERT INTO users (username, password, role, status)
-    VALUES ('admin', 'admin123', 'admin', 1)
+    VALUES ('admin',
+            '1723700000:8825906392100d86acd2332e7c0d5e4016ea2923fcdb34712218b03f5dca71f1',
+            'admin', 1)
     ON DUPLICATE KEY UPDATE username = VALUES(username);

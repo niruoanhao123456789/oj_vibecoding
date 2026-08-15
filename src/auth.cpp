@@ -11,6 +11,7 @@
 #include <stdexcept>
 
 #include "db.h"
+#include "hash.h"
 #include "log.h"
 
 namespace oj {
@@ -107,7 +108,7 @@ bool register_user(Database& db, const std::string& username,
     auto st = db.prepare(
         "INSERT INTO users (username, password, role, status) "
         "VALUES (?, ?, 'student', 1)");
-    st->bind(username).bind(password);
+    st->bind(username).bind(encode_password(password, make_salt()));
     if (!st->execute()) {
         // 并发下唯一索引兜底
         if (st->error().find("Duplicate") != std::string::npos ||
@@ -142,7 +143,7 @@ bool login_user(Database& db, const std::string& username,
     const std::string role = q->cell(0, 2).as_string();
     const int status = q->cell(0, 3).as_int();
 
-    if (db_pwd != password) {
+    if (!verify_password(password, db_pwd)) {
         err_code = kErrWrongPassword;
         err_msg = "密码错误";
         return false;

@@ -312,6 +312,7 @@ protected:
 
     void cleanup() {
         db_.execute("DELETE FROM problems WHERE title LIKE 'ut_%'");
+        db_.execute("DELETE FROM users WHERE username = 'ut_creator'");
     }
 
     std::string title(const std::string& t) { return "ut_" + t; }

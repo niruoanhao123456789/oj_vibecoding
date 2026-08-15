@@ -8,7 +8,7 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
-#include <map>
+#include <unordered_map>
 #include <sstream>
 #include <stdexcept>
 #include <utility>
@@ -356,8 +356,8 @@ bool query_problem_list(Database& db, unsigned int user_id,
     }
 
     // 登录用户的每题状态：AC（有 AC 提交）/ attempted（仅非 AC 提交）
-    std::map<unsigned long long, bool> my_ac;
-    std::map<unsigned long long, bool> my_submitted;
+    std::unordered_map<unsigned long long, bool> my_ac;
+    std::unordered_map<unsigned long long, bool> my_submitted;
     if (user_id > 0) {
         auto mine = db.query(
             "SELECT problem_id, MAX(status = 'AC') AS has_ac "

@@ -7,15 +7,19 @@
 #include <sstream>
 
 #include "auth.h"
+#include "judge/worker.h"
 #include "log.h"
 #include "ojclass.h"
 #include "problem.h"
+#include "submission.h"
 
 namespace oj {
 
 Server::Server(const Config& cfg) : cfg_(cfg) {
     svr_ = std::make_unique<httplib::Server>();
 }
+
+Server::~Server() = default;
 
 namespace {
 
@@ -46,16 +50,49 @@ std::string request_token(const httplib::Request& req) {
     return header.substr(b, e - b);
 }
 
+// 解析提交请求体：problem_id(int) + language(string) + code(string)。
+// 字段缺失或类型错误返回 false。
+bool parse_submission_body(const httplib::Request& req, unsigned int& problem_id,
+                           std::string& language, std::string& code) {
+    if (req.body.empty()) {
+        return false;
+    }
+    Json::Value root;
+    Json::CharReaderBuilder builder;
+    std::string errs;
+    std::istringstream in(req.body);
+    if (!Json::parseFromStream(builder, in, &root, &errs) || !root.isObject()) {
+        return false;
+    }
+    if (!root.isMember("problem_id") || !root["problem_id"].isInt() ||
+        root["problem_id"].asInt() <= 0) {
+        return false;
+    }
+    if (!root.isMember("language") || !root["language"].isString()) {
+        return false;
+    }
+    if (!root.isMember("code") || !root["code"].isString()) {
+        return false;
+    }
+    problem_id = static_cast<unsigned int>(root["problem_id"].asInt());
+    language = root["language"].asString();
+    code = root["code"].asString();
+    return true;
+}
+
 } // namespace
 
 bool Server::start() {
-    Database db;
-    if (!db.connect(cfg_)) {
+    if (!db_.connect(cfg_)) {
         LOG_ERROR("DB connection failed");
         return false;
     }
     LOG_INFO("DB connection OK (%s:%d/%s)", cfg_.db_host.c_str(),
              cfg_.db_port, cfg_.db_name.c_str());
+
+    // 判题 worker 池：消费内存队列，回写 submissions 表
+    workers_ = std::make_unique<JudgeWorkerPool>(db_, cfg_, queue_);
+    workers_->start();
 
     svr_->set_mount_point("/", cfg_.frontend_dir);
     svr_->set_logger([](const httplib::Request& req, const httplib::Response& res) {
@@ -87,7 +124,7 @@ bool Server::start() {
             return;
         }
         std::string err_code, err_msg;
-        if (!register_user(db, username, password, err_code, err_msg)) {
+        if (!register_user(db_, username, password, err_code, err_msg)) {
             const int status = err_code == kErrUsernameExists ? 409 : 500;
             send_error(res, status, err_code, err_msg);
             return;
@@ -112,7 +149,7 @@ bool Server::start() {
         std::string token;
         SessionUser user;
         std::string err_code, err_msg;
-        if (!login_user(db, username, password, token, user, err_code,
+        if (!login_user(db_, username, password, token, user, err_code,
                         err_msg)) {
             const int status =
                 err_code == kErrUserNotFound || err_code == kErrWrongPassword
@@ -133,7 +170,7 @@ bool Server::start() {
     // POST /api/logout
     svr_->Post("/api/logout", [&](const httplib::Request& req,
                                   httplib::Response& res) {
-        logout(db, request_token(req));
+        logout(db_, request_token(req));
         clear_session_cookie(res);
         send_ok(res, Json::Value(Json::objectValue));
     });
@@ -142,7 +179,7 @@ bool Server::start() {
     svr_->Get("/api/me", [&](const httplib::Request& req,
                              httplib::Response& res) {
         SessionUser user;
-        if (!require_auth(db, req, res, user)) {
+        if (!require_auth(db_, req, res, user)) {
             return;
         }
         Json::Value data;
@@ -158,11 +195,11 @@ bool Server::start() {
     svr_->Get("/api/problems", [&](const httplib::Request& req,
                                    httplib::Response& res) {
         SessionUser user;
-        const bool logged_in = resolve_session(db, req, user);
+        const bool logged_in = resolve_session(db_, req, user);
         const unsigned int uid = logged_in ? user.id : 0;
         const std::string role = logged_in ? user.role : "";
         Json::Value data;
-        if (!query_problem_list(db, uid, role, data)) {
+        if (!query_problem_list(db_, uid, role, data)) {
             send_error(res, 500, kErrInternal, "题目列表查询失败");
             return;
         }
@@ -175,15 +212,91 @@ bool Server::start() {
                   const unsigned int id = static_cast<unsigned int>(
                       std::strtoul(req.matches[1].str().c_str(), nullptr, 10));
                   SessionUser user;
-                  const bool logged_in = resolve_session(db, req, user);
+                  const bool logged_in = resolve_session(db_, req, user);
                   const unsigned int uid = logged_in ? user.id : 0;
                   const std::string role = logged_in ? user.role : "";
                   Json::Value data;
-                  if (!query_problem_detail(db, id, uid, role, data)) {
+                  if (!query_problem_detail(db_, id, uid, role, data)) {
                       send_error(res, 404, kErrProblemNotFound, "题目不存在");
                       return;
                   }
                   send_ok(res, data);
+              });
+
+    // ---- 提交 API（阶段 6）----
+
+    // POST /api/submissions：创建提交（写 PENDING → 入判题队列）
+    svr_->Post("/api/submissions", [&](const httplib::Request& req,
+                                       httplib::Response& res) {
+        SessionUser user;
+        if (!require_auth(db_, req, res, user)) {
+            return;
+        }
+        unsigned int problem_id = 0;
+        std::string language, code;
+        if (!parse_submission_body(req, problem_id, language, code)) {
+            send_error(res, 400, kErrParamInvalid,
+                       "请求体必须是 JSON 且包含正整数 problem_id、字符串 "
+                       "language 与 code 字段");
+            return;
+        }
+        Json::Value out;
+        std::string err_code, err_msg;
+        if (!create_submission(db_, user.id, user.role, problem_id, language,
+                               code, out, err_code, err_msg)) {
+            const int status =
+                err_code == kErrProblemNotFound
+                    ? 404
+                    : err_code == kErrParamInvalid ? 400 : 500;
+            send_error(res, status, err_code, err_msg);
+            return;
+        }
+        const unsigned long long sid = out["id"].asUInt64();
+        queue_.push(sid);  // 入队，由 worker 消费
+        LOG_INFO("submission created & enqueued: id=%llu user=%u problem=%u",
+                 sid, user.id, problem_id);
+        send_ok(res, out);
+    });
+
+    // GET /api/submissions：本人/指定用户提交历史
+    svr_->Get("/api/submissions", [&](const httplib::Request& req,
+                                      httplib::Response& res) {
+        SessionUser user;
+        if (!require_auth(db_, req, res, user)) {
+            return;
+        }
+        bool filter_by_user = false;
+        unsigned int target_user = 0;
+        const std::string param = req.get_param_value("user_id");
+        if (!param.empty()) {
+            filter_by_user = true;
+            target_user = static_cast<unsigned int>(
+                std::strtoul(param.c_str(), nullptr, 10));
+        }
+        Json::Value out;
+        if (!list_submissions(db_, user.id, user.role, filter_by_user,
+                              target_user, out)) {
+            send_error(res, 500, kErrInternal, "提交列表查询失败");
+            return;
+        }
+        send_ok(res, out);
+    });
+
+    // GET /api/submissions/:id：提交详情（轮询判题状态）
+    svr_->Get(R"(/api/submissions/(\d+))",
+              [&](const httplib::Request& req, httplib::Response& res) {
+                  SessionUser user;
+                  if (!require_auth(db_, req, res, user)) {
+                      return;
+                  }
+                  const unsigned long long sid = std::strtoull(
+                      req.matches[1].str().c_str(), nullptr, 10);
+                  Json::Value out;
+                  if (!get_submission(db_, sid, user.id, user.role, out)) {
+                      send_error(res, 404, kErrSubmissionNotFound, "提交不存在");
+                      return;
+                  }
+                  send_ok(res, out);
               });
 
     // ---- 班级 API（阶段 8）----
@@ -192,11 +305,11 @@ bool Server::start() {
     svr_->Get("/api/admin/class", [&](const httplib::Request& req,
                                       httplib::Response& res) {
         SessionUser user;
-        if (!require_staff(db, req, res, user)) {
+        if (!require_staff(db_, req, res, user)) {
             return;
         }
         Json::Value data;
-        if (!get_teacher_class(db, user.id, data)) {
+        if (!get_teacher_class(db_, user.id, data)) {
             send_error(res, 500, kErrInternal, "班级查询失败");
             return;
         }
@@ -207,7 +320,7 @@ bool Server::start() {
     svr_->Post("/api/admin/class", [&](const httplib::Request& req,
                                        httplib::Response& res) {
         SessionUser user;
-        if (!require_staff(db, req, res, user)) {
+        if (!require_staff(db_, req, res, user)) {
             return;
         }
         std::string name = "默认班级";
@@ -227,7 +340,7 @@ bool Server::start() {
             }
         }
         Json::Value data;
-        if (!create_class(db, user.id, name, data)) {
+        if (!create_class(db_, user.id, name, data)) {
             send_error(res, 500, kErrInternal, "创建班级失败");
             return;
         }
@@ -240,11 +353,11 @@ bool Server::start() {
     svr_->Post("/api/admin/class/invite", [&](const httplib::Request& req,
                                               httplib::Response& res) {
         SessionUser user;
-        if (!require_staff(db, req, res, user)) {
+        if (!require_staff(db_, req, res, user)) {
             return;
         }
         Json::Value data;
-        if (!regenerate_invite_code(db, user.id, data)) {
+        if (!regenerate_invite_code(db_, user.id, data)) {
             send_error(res, 400, kErrProblemNotFound, "尚未创建班级");
             return;
         }
@@ -256,7 +369,7 @@ bool Server::start() {
     svr_->Post("/api/class/join", [&](const httplib::Request& req,
                                       httplib::Response& res) {
         SessionUser user;
-        if (!require_student(db, req, res, user)) {
+        if (!require_student(db_, req, res, user)) {
             return;
         }
         std::string invite_code;
@@ -267,7 +380,7 @@ bool Server::start() {
         }
         std::string err_code, err_msg;
         Json::Value data;
-        if (!join_class(db, user.id, invite_code, err_code, err_msg, data)) {
+        if (!join_class(db_, user.id, invite_code, err_code, err_msg, data)) {
             const int status = err_code == kErrInviteCodeInvalid ? 400 : 500;
             send_error(res, status, err_code, err_msg);
             return;
@@ -276,12 +389,35 @@ bool Server::start() {
         send_ok(res, data);
     });
 
+    // POST /api/admin/submissions/:id/rejudge：重判（教师/管理员，幂等入队）
+    svr_->Post(R"(/api/admin/submissions/(\d+)/rejudge)",
+               [&](const httplib::Request& req, httplib::Response& res) {
+                   SessionUser user;
+                   if (!require_staff(db_, req, res, user)) {
+                       return;
+                   }
+                   const unsigned long long sid = std::strtoull(
+                       req.matches[1].str().c_str(), nullptr, 10);
+                   if (!enqueue_rejudge(db_, queue_, sid)) {
+                       send_error(res, 404, kErrProblemNotFound, "提交不存在");
+                       return;
+                   }
+                   LOG_INFO("rejudge enqueued: submission_id=%llu by %s", sid,
+                            user.username.c_str());
+                   Json::Value data;
+                   data["id"] = static_cast<Json::UInt64>(sid);
+                   send_ok(res, data);
+               });
+
     LOG_INFO("listening on %s:%d", cfg_.host.c_str(), cfg_.port);
     svr_->listen(cfg_.host, cfg_.port);
     return true;
 }
 
 void Server::stop() {
+    if (workers_) {
+        workers_->stop();
+    }
     if (svr_) {
         svr_->stop();
     }

@@ -42,6 +42,7 @@ constexpr const char* kErrWrongPassword = "WRONG_PASSWORD";
 constexpr const char* kErrAccountDisabled = "ACCOUNT_DISABLED";
 constexpr const char* kErrNotAuthenticated = "NOT_AUTHENTICATED";
 constexpr const char* kErrProblemNotFound = "PROBLEM_NOT_FOUND";
+constexpr const char* kErrSubmissionNotFound = "SUBMISSION_NOT_FOUND";
 constexpr const char* kErrForbidden = "FORBIDDEN";
 constexpr const char* kErrInviteCodeInvalid = "INVITE_CODE_INVALID";
 constexpr const char* kErrAlreadyJoined = "ALREADY_JOINED";

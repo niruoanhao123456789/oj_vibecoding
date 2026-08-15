@@ -36,7 +36,7 @@
 |---|---|---|---|
 | id | INT UNSIGNED | 自增主键 | 用户 ID |
 | username | VARCHAR(64) | NOT NULL, UNIQUE | 登录用户名 |
-| password | VARCHAR(128) | NOT NULL | 密码（教学演示，明文或简单存储均可） |
+| password | VARCHAR(128) | NOT NULL | 密码（以 `时间戳盐:sha256(密码+盐)` 形式加密存储，非明文） |
 | role | ENUM('student','teacher','admin') | NOT NULL, DEFAULT 'student' | 角色 |
 | status | TINYINT | NOT NULL, DEFAULT 1 | 1 正常 / 0 禁用 |
 | created_at | DATETIME | DEFAULT CURRENT_TIMESTAMP | 注册时间 |
@@ -222,13 +222,15 @@ oj_vibecoding/
 │   └── server.json                # 服务配置（端口/DB/worker 数/路径）
 ├── sql/
 │   ├── schema.sql                 # 建表脚本（6 张表 + 索引 + 初始账号）
-│   └── init.sh                    # 初始化数据库辅助脚本
+│   ├── migrate_password_hash.sql  # 历史明文密码迁移脚本（时间戳盐 + SHA-256）
+│   └── init_db.sql                # 初始化数据库辅助脚本
 ├── src/
 │   ├── main.cpp                   # 程序入口，路由注册与启动
 │   ├── log.h / log.cpp            # 统一日志模块（等级过滤/双输出/按天滚动）
 │   ├── server.h / server.cpp      # HTTP 服务与静态托管
 │   ├── config.h / config.cpp      # 配置加载
 │   ├── db.h / db.cpp              # MySQL 访问层（参数化查询）
+│   ├── hash.h / hash.cpp          # 密码简单加密（时间戳盐 + SHA-256）
 │   ├── problem.h / problem.cpp    # 题目 JSON 格式解析 + 导入器
 │   ├── auth.h / auth.cpp          # 注册/登录/登出/Session 中间件
 │   ├── ojclass.h / ojclass.cpp    # 班级管理（建班/邀请码/学生入班/可见性）
@@ -331,7 +333,7 @@ oj_vibecoding/
 
 ## 8. 安全
 
-无需额外安全加固。教学演示环境，仅保留最基础的资源限制（CPU/内存/超时）与基础会话保持，不引入加密哈希、鉴权中间件、CSRF 等加固措施。
+无需额外安全加固。教学演示环境，仅保留最基础的资源限制（CPU/内存/超时）与基础会话保持，密码以「时间戳盐 + SHA-256」简单加密存储（见 4.1），不引入 bcrypt 等强哈希、CSRF 等加固措施。
 
 ## 9. 边缘与异常
 
@@ -357,6 +359,7 @@ oj_vibecoding/
 **后端**
 - [x] `POST /api/register`：校验用户名唯一性、长度与字符合法性，校验密码长度，写入 users 表（默认 student 角色）
 - [x] `POST /api/login`：查询用户、校验密码，生成随机 token 写入 sessions，`Set-Cookie` 返回会话
+- [x] 密码加密存储：注册时以「时间戳盐 + SHA-256」编码（`盐:sha256(密码+盐)`，盐含注册时间戳+微秒+随机数）写入，登录时解析盐重算比对；明文不落库；兼容历史明文登录，并可由 `sql/migrate_password_hash.sql` 一次性迁移存量数据
 - [x] `POST /api/logout`：删除会话并清除 Cookie
 - [x] `GET /api/me`：凭 Cookie 返回当前用户信息（id/用户名/角色）
 - [x] Session 中间件：从 Cookie 解析 token、校验未过期、注入请求上下文；无有效会话时返回 401
@@ -376,20 +379,20 @@ oj_vibecoding/
 - [x] 验证：curl 可查列表与详情；浏览器可加载前端资源
 
 ### 阶段 5：判题引擎
-- [ ] 编译模块：C++ 用 `g++ -O2 -std=c++17`、C 用 `gcc -O2 -std=c11` 编译到临时目录，捕获编译错误输出，编译超时处理
-- [ ] 运行模块：`fork/exec` 子进程，`setrlimit` 设 CPU/内存/时间上限，逐测试点运行并收集输出
-- [ ] 状态判定：超时→TLE、超内存→MLE、非零退出→RE；其余→宽松比对（忽略空白/空行）
-- [ ] 宽松比对函数：规范化输出后逐行比较
-- [ ] 任务队列：内存队列（PENDING），提交入队
-- [ ] worker 池：2-4 个线程消费队列，串行编译/运行，回写 submissions 表状态与耗时/内存/错误信息
-- [ ] 容错：worker 崩溃/卡死/测试点缺失→SYSTEM_ERROR，支持重判接口
-- [ ] 验证：构造 AC/WA/TLE/MLE/CE/RE 六类提交，状态判定全部正确
+- [x] 编译模块：C++ 用 `g++ -O2 -std=c++17`、C 用 `gcc -O2 -std=c11` 编译到临时目录，捕获编译错误输出，编译超时处理
+- [x] 运行模块：`fork/exec` 子进程，`setrlimit` 设 CPU/内存/时间上限，逐测试点运行并收集输出
+- [x] 状态判定：超时→TLE、超内存→MLE、非零退出→RE；其余→宽松比对（忽略空白/空行）
+- [x] 宽松比对函数：规范化输出后逐行比较
+- [x] 任务队列：内存队列（PENDING），提交入队
+- [x] worker 池：2-4 个线程消费队列，串行编译/运行，回写 submissions 表状态与耗时/内存/错误信息
+- [x] 容错：worker 崩溃/卡死/测试点缺失→SYSTEM_ERROR，支持重判接口
+- [x] 验证：构造 AC/WA/TLE/MLE/CE/RE 六类提交，状态判定全部正确
 
 ### 阶段 6：提交流程
-- [ ] `POST /api/submissions`：写 submissions(PENDING) → 入队 → 返回 submission_id
-- [ ] `GET /api/submissions/:id`：返回当前状态/结果（供轮询）
-- [ ] `GET /api/submissions?user_id=`：本人提交历史列表
-- [ ] 验证：提交后轮询能观察到 PENDING→…→终态全过程
+- [x] `POST /api/submissions`：写 submissions(PENDING) → 入队 → 返回 submission_id
+- [x] `GET /api/submissions/:id`：返回当前状态/结果（供轮询）
+- [x] `GET /api/submissions?user_id=`：本人提交历史列表
+- [x] 验证：提交后轮询能观察到 PENDING→…→终态全过程
 
 ### 阶段 7：前端全页面
 - [ ] 公共框架：导航栏（含登录态）、样式表、公共 JS（fetch 封装、状态徽标渲染、轮询工具）

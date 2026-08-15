@@ -23,9 +23,17 @@ add_executable(oj_server
   src/auth.cpp
   src/config.cpp
   src/db.cpp
+  src/hash.cpp
   src/log.cpp
   src/problem.cpp
   src/ojclass.cpp
+  src/submission.cpp
+  src/judge/compiler.cpp
+  src/judge/compare.cpp
+  src/judge/queue.cpp
+  src/judge/runner.cpp
+  src/judge/util.cpp
+  src/judge/worker.cpp
 )
 
 target_include_directories(oj_server PRIVATE

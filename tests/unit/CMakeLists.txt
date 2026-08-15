@@ -53,6 +53,12 @@ oj_register_gtest(oj_config_test config_test.cpp ${OJ_TEST_CORE})
 # oj_auth_test：认证校验纯单元测试
 oj_register_gtest(oj_auth_test auth_test.cpp ${OJ_TEST_CORE}
   ${OJ_TEST_SRC_DIR}/src/auth.cpp
+  ${OJ_TEST_SRC_DIR}/src/hash.cpp
+)
+
+# oj_hash_test：密码盐 + SHA-256 加密纯单元测试
+oj_register_gtest(oj_hash_test hash_test.cpp ${OJ_TEST_CORE}
+  ${OJ_TEST_SRC_DIR}/src/hash.cpp
 )
 
 # oj_log_test：日志模块纯单元测试
@@ -69,6 +75,23 @@ oj_register_gtest(oj_class_test ojclass_test.cpp ${OJ_TEST_CORE}
   ${OJ_TEST_SRC_DIR}/src/ojclass.cpp
 )
 
+# oj_submission_test：提交模块测试（可见性/权限/列表，需本地 MySQL 否则 SKIP）
+oj_register_gtest(oj_submission_test submission_test.cpp ${OJ_TEST_CORE}
+  ${OJ_TEST_SRC_DIR}/src/problem.cpp
+  ${OJ_TEST_SRC_DIR}/src/ojclass.cpp
+  ${OJ_TEST_SRC_DIR}/src/submission.cpp
+)
+
+# oj_judge_test：宽松比对纯单测 + 编译/运行/六类结果集成测试
+oj_register_gtest(oj_judge_test judge_test.cpp ${OJ_TEST_CORE}
+  ${OJ_TEST_SRC_DIR}/src/judge/compiler.cpp
+  ${OJ_TEST_SRC_DIR}/src/judge/compare.cpp
+  ${OJ_TEST_SRC_DIR}/src/judge/queue.cpp
+  ${OJ_TEST_SRC_DIR}/src/judge/runner.cpp
+  ${OJ_TEST_SRC_DIR}/src/judge/util.cpp
+  ${OJ_TEST_SRC_DIR}/src/judge/worker.cpp
+)
+
 # oj_db_test：DB 访问层集成测试（连接/参数化执行/类型化查询/schema）
 oj_register_gtest(oj_db_test db_test.cpp ${OJ_TEST_CORE})
 
@@ -76,8 +99,16 @@ oj_register_gtest(oj_db_test db_test.cpp ${OJ_TEST_CORE})
 add_executable(oj_server_test server_test.cpp
   ${OJ_TEST_SRC_DIR}/src/server.cpp
   ${OJ_TEST_SRC_DIR}/src/auth.cpp
+  ${OJ_TEST_SRC_DIR}/src/hash.cpp
   ${OJ_TEST_SRC_DIR}/src/problem.cpp
   ${OJ_TEST_SRC_DIR}/src/ojclass.cpp
+  ${OJ_TEST_SRC_DIR}/src/submission.cpp
+  ${OJ_TEST_SRC_DIR}/src/judge/compiler.cpp
+  ${OJ_TEST_SRC_DIR}/src/judge/compare.cpp
+  ${OJ_TEST_SRC_DIR}/src/judge/queue.cpp
+  ${OJ_TEST_SRC_DIR}/src/judge/runner.cpp
+  ${OJ_TEST_SRC_DIR}/src/judge/util.cpp
+  ${OJ_TEST_SRC_DIR}/src/judge/worker.cpp
   ${OJ_TEST_CORE}
 )
 target_include_directories(oj_server_test PRIVATE

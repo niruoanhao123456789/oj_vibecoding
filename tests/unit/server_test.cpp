@@ -10,6 +10,7 @@
 #include <memory>
 #include <string>
 #include <thread>
+#include <vector>
 
 #include "config.h"
 #include "db.h"
@@ -63,6 +64,16 @@ protected:
         if (thread_.joinable()) {
             thread_.join();
         }
+        // 清理本测试通过 HTTP 创建的提交，避免污染其它测试套件
+        if (!test_submission_ids_.empty()) {
+            oj::Config cfg = test_config();
+            oj::Database db;
+            if (db.connect(cfg)) {
+                for (const auto& id : test_submission_ids_) {
+                    db.execute("DELETE FROM submissions WHERE id = ?", id);
+                }
+            }
+        }
     }
 
     std::string base_url() const {
@@ -73,6 +84,7 @@ protected:
     std::unique_ptr<oj::Server> server_;
     std::thread thread_;
     bool ready_ = false;
+    std::vector<std::string> test_submission_ids_;
 };
 
 TEST_F(ServerTest, HealthEndpointReturnsOk) {
@@ -119,6 +131,41 @@ httplib::Client login_admin(const std::string& base, std::string& cookie) {
         cookie = res->get_header_value("Set-Cookie");
     }
     return cli;
+}
+
+// 注册并登录任意账号，返回携带会话的 Client。
+httplib::Client login_user(const std::string& base, const std::string& username,
+                           const std::string& password,
+                           std::string& cookie) {
+    httplib::Client cli(base);
+    const std::string body = "{\"username\":\"" + username +
+                             "\",\"password\":\"" + password + "\"}";
+    cli.Post("/api/register", {{"Content-Type", "application/json"}}, body,
+             "application/json");
+    auto res = cli.Post("/api/login", {{"Content-Type", "application/json"}},
+                        body, "application/json");
+    if (res) {
+        cookie = res->get_header_value("Set-Cookie");
+    }
+    return cli;
+}
+
+// 提取 JSON 中第一个数字（如 {"id":123,...} 中的 123）。
+std::string first_json_number(const std::string& body, const std::string& key) {
+    const std::string needle = "\"" + key + "\":";
+    const size_t pos = body.find(needle);
+    if (pos == std::string::npos) {
+        return "";
+    }
+    const std::string tail = body.substr(pos + needle.size());
+    const size_t end = tail.find_first_not_of("0123456789");
+    return end == std::string::npos ? tail : tail.substr(0, end);
+}
+
+bool is_terminal_status(const std::string& s) {
+    return s == "AC" || s == "WA" || s == "RE" || s == "TLE" ||
+           s == "MLE" || s == "COMPILE_ERROR" || s == "COMPILE_TIMEOUT" ||
+           s == "SYSTEM_ERROR";
 }
 
 TEST_F(ServerTest, ProblemListReturnsProblems) {
@@ -218,6 +265,143 @@ TEST_F(ServerTest, StudentCannotAccessStaffClass) {
     ASSERT_TRUE(res);
     EXPECT_EQ(res->status, 403);
     EXPECT_NE(res->body.find("FORBIDDEN"), std::string::npos);
+}
+
+// ---------- 提交 API（阶段 6） ----------
+
+TEST_F(ServerTest, SubmissionRequiresAuth) {
+    httplib::Client cli(base_url());
+    auto res = cli.Post("/api/submissions",
+                        {{"Content-Type", "application/json"}},
+                        "{\"problem_id\":1,\"language\":\"cpp\","
+                        "\"code\":\"int main(){return 0;}\"}",
+                        "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 401);
+}
+
+TEST_F(ServerTest, SubmissionRejectsBadParams) {
+    std::string cookie;
+    httplib::Client cli = login_admin(base_url(), cookie);
+
+    // 非法语言
+    auto res = cli.Post("/api/submissions",
+                        {{"Content-Type", "application/json"},
+                         {"Cookie", cookie}},
+                        "{\"problem_id\":1,\"language\":\"java\","
+                        "\"code\":\"int main(){}\"}",
+                        "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400);
+    EXPECT_NE(res->body.find("PARAM_INVALID"), std::string::npos);
+
+    // 空代码
+    res = cli.Post("/api/submissions",
+                   {{"Content-Type", "application/json"}, {"Cookie", cookie}},
+                   "{\"problem_id\":1,\"language\":\"cpp\",\"code\":\"\"}",
+                   "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 400);
+
+    // 不存在的题目
+    res = cli.Post("/api/submissions",
+                   {{"Content-Type", "application/json"}, {"Cookie", cookie}},
+                   "{\"problem_id\":99999999,\"language\":\"cpp\","
+                   "\"code\":\"int main(){}\"}",
+                   "application/json");
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404);
+    EXPECT_NE(res->body.find("PROBLEM_NOT_FOUND"), std::string::npos);
+}
+
+TEST_F(ServerTest, SubmitPollHistoryFullFlow) {
+    std::string cookie;
+    httplib::Client cli = login_admin(base_url(), cookie);
+
+    // 取第一个可见题目
+    auto list = cli.Get("/api/problems", {{"Cookie", cookie}});
+    ASSERT_TRUE(list);
+    const std::string pid = first_json_number(list->body, "id");
+    ASSERT_FALSE(pid.empty());
+
+    // 提交一个无输出的程序 → 各题都会得到确定性的非 AC 终态
+    auto created = cli.Post("/api/submissions",
+                            {{"Content-Type", "application/json"},
+                             {"Cookie", cookie}},
+                            "{\"problem_id\":" + pid +
+                                ",\"language\":\"cpp\","
+                                "\"code\":\"int main(){return 0;}\"}",
+                            "application/json");
+    ASSERT_TRUE(created);
+    EXPECT_EQ(created->status, 200);
+    EXPECT_NE(created->body.find("\"status\":\"PENDING\""),
+              std::string::npos);
+    const std::string sid = first_json_number(created->body, "id");
+    ASSERT_FALSE(sid.empty());
+    test_submission_ids_.push_back(sid);
+
+    // 轮询直到终态（观察 PENDING → … → 终态全过程）
+    std::string status;
+    for (int i = 0; i < 200; ++i) {
+        auto res = cli.Get("/api/submissions/" + sid, {{"Cookie", cookie}});
+        ASSERT_TRUE(res);
+        EXPECT_EQ(res->status, 200);
+        // status 为字符串字段，直接解析其值
+        const std::string key = "\"status\":\"";
+        const size_t pos = res->body.find(key);
+        status = pos == std::string::npos
+                     ? ""
+                     : res->body.substr(pos + key.size(),
+                                        res->body.find('"', pos + key.size()) -
+                                            (pos + key.size()));
+        if (is_terminal_status(status)) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(50));
+    }
+    EXPECT_TRUE(is_terminal_status(status)) << "最终状态: " << status;
+
+    // 历史列表应包含该提交
+    auto history = cli.Get("/api/submissions", {{"Cookie", cookie}});
+    ASSERT_TRUE(history);
+    EXPECT_EQ(history->status, 200);
+    EXPECT_NE(history->body.find("\"id\":" + sid), std::string::npos);
+    EXPECT_NE(history->body.find("\"problem_title\""), std::string::npos);
+}
+
+TEST_F(ServerTest, StudentCannotViewOthersSubmission) {
+    // 管理员先提交一条
+    std::string admin_cookie;
+    httplib::Client admin_cli = login_admin(base_url(), admin_cookie);
+    auto list = admin_cli.Get("/api/problems", {{"Cookie", admin_cookie}});
+    ASSERT_TRUE(list);
+    const std::string pid = first_json_number(list->body, "id");
+    ASSERT_FALSE(pid.empty());
+    auto created = admin_cli.Post(
+        "/api/submissions",
+        {{"Content-Type", "application/json"}, {"Cookie", admin_cookie}},
+        "{\"problem_id\":" + pid +
+            ",\"language\":\"cpp\",\"code\":\"int main(){return 0;}\"}",
+        "application/json");
+    ASSERT_TRUE(created);
+    const std::string sid = first_json_number(created->body, "id");
+    ASSERT_FALSE(sid.empty());
+    test_submission_ids_.push_back(sid);
+
+    // 未入班学生看不到他人提交（404）
+    std::string stu_cookie;
+    httplib::Client stu_cli = login_user(base_url(), "sub_view_stu",
+                                         "pass123", stu_cookie);
+    auto res = stu_cli.Get("/api/submissions/" + sid, {{"Cookie", stu_cookie}});
+    ASSERT_TRUE(res);
+    EXPECT_EQ(res->status, 404);
+    EXPECT_NE(res->body.find("SUBMISSION_NOT_FOUND"), std::string::npos);
+
+    // 未登录访问列表 → 401
+    httplib::Client anon(base_url());
+    auto anon_res = anon.Get("/api/submissions");
+    ASSERT_TRUE(anon_res);
+    EXPECT_EQ(anon_res->status, 401);
 }
 
 } // namespace
