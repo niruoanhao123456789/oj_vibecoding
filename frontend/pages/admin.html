@@ -13,7 +13,8 @@
       <h1 class="page-title">管理</h1>
       <div id="alert" class="alert"></div>
 
-      <div class="panel" id="class-panel">
+      <!-- 教师：班级管理 -->
+      <div class="panel" id="class-panel" style="display:none;">
         <h2>班级管理</h2>
         <div id="class-info"></div>
         <form id="class-form">
@@ -28,8 +29,80 @@
           <button type="button" id="invite-btn" class="btn" style="background:var(--danger);">重置邀请码</button>
         </div>
       </div>
+
+      <!-- 管理员：用户管理 -->
+      <div class="panel" id="user-panel" style="display:none;">
+        <h2>用户管理</h2>
+        <form id="user-create-form" class="join-row" style="margin-bottom:12px;">
+          <input type="text" id="user-username" placeholder="用户名" maxlength="64">
+          <input type="password" id="user-password" placeholder="密码（至少 6 位）" maxlength="128">
+          <select id="user-role">
+            <option value="student">学生</option>
+            <option value="teacher">教师</option>
+            <option value="admin">管理员</option>
+          </select>
+          <button type="submit" class="btn">新增用户</button>
+        </form>
+        <table class="table" id="user-table">
+          <thead>
+            <tr>
+              <th>ID</th>
+              <th>用户名</th>
+              <th>角色</th>
+              <th>状态</th>
+              <th>班级</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="user-body"></tbody>
+        </table>
+      </div>
+
+      <!-- 管理员：系统配置 -->
+      <div class="panel" id="config-panel" style="display:none;">
+        <h2>教师注册邀请码</h2>
+        <p class="muted">学生注册时填写此邀请码即可注册为教师。</p>
+        <form id="config-form" class="join-row">
+          <input type="text" id="config-code" maxlength="255">
+          <button type="submit" class="btn">保存</button>
+        </form>
+      </div>
+
+      <!-- 教师/管理员：题目管理 -->
+      <div class="panel" id="problem-panel">
+        <h2>题目管理</h2>
+        <p class="muted">管理员发布为全局题（所有已入班学生可见）；教师发布为本班题。</p>
+        <div id="problem-list"></div>
+        <div style="margin-top:16px;">
+          <details>
+            <summary style="cursor:pointer;margin-bottom:8px;">导入 / 修改题目（JSON，格式见 SPEC 4.9）</summary>
+            <div class="form-group">
+              <label for="problem-json">题目 JSON</label>
+              <textarea id="problem-json" rows="12" style="width:100%;font-family:monospace;font-size:13px;"></textarea>
+            </div>
+            <button type="button" id="problem-import-btn" class="btn">导入题目</button>
+            <span id="problem-edit-id" class="muted"></span>
+            <button type="button" id="problem-update-btn" class="btn" style="display:none;background:var(--primary-dark);">保存修改</button>
+            <button type="button" id="problem-cancel-btn" class="btn" style="display:none;background:var(--muted);">取消</button>
+          </details>
+        </div>
+      </div>
     </div>
   </div>
+
+  <!-- 确认弹窗 -->
+  <div id="confirm-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:1000;align-items:center;justify-content:center;">
+    <div class="card" style="max-width:460px;width:100%;">
+      <h2 style="font-size:17px;margin:0 0 12px;">请确认操作</h2>
+      <p id="confirm-message" style="font-size:14px;color:var(--text);"></p>
+      <p id="confirm-warning" style="font-size:13px;color:var(--danger);background:#fdecea;border:1px solid #f5c6c2;border-radius:6px;padding:8px 10px;display:none;"></p>
+      <div style="margin-top:18px;display:flex;gap:10px;justify-content:flex-end;">
+        <button type="button" id="confirm-cancel" class="btn" style="background:var(--muted);">取消</button>
+        <button type="button" id="confirm-ok" class="btn" style="background:var(--danger);">确认执行</button>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/common.js"></script>
   <script src="/js/admin.js"></script>
 </body>

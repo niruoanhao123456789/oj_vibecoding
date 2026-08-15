@@ -46,6 +46,9 @@ constexpr const char* kErrSubmissionNotFound = "SUBMISSION_NOT_FOUND";
 constexpr const char* kErrForbidden = "FORBIDDEN";
 constexpr const char* kErrInviteCodeInvalid = "INVITE_CODE_INVALID";
 constexpr const char* kErrAlreadyJoined = "ALREADY_JOINED";
+constexpr const char* kErrTeacherCodeInvalid = "TEACHER_CODE_INVALID";
+constexpr const char* kErrCannotModifySelf = "CANNOT_MODIFY_SELF";
+constexpr const char* kErrLastAdmin = "LAST_ADMIN";
 constexpr const char* kErrInternal = "INTERNAL_ERROR";
 
 // ---- 统一 JSON 响应辅助 ----
@@ -68,11 +71,11 @@ std::string validate_username(const std::string& username);
 // 校验密码格式，返回错误消息（空串表示合法）。
 std::string validate_password(const std::string& password);
 
-// 注册新用户（默认 student 角色，status=1）。
+// 注册新用户（默认 student 角色，status=1；role 可为 teacher）。
 // 成功返回 true；失败返回 false 并回填错误码/错误消息。
 bool register_user(Database& db, const std::string& username,
-                   const std::string& password, std::string& err_code,
-                   std::string& err_msg);
+                   const std::string& password, const std::string& role,
+                   std::string& err_code, std::string& err_msg);
 
 // 登录校验：查询用户、比对密码、生成 token 写入 sessions 表。
 // 成功返回 true 并回填 token 与用户信息。
@@ -92,6 +95,10 @@ bool require_auth(Database& db, const httplib::Request& req,
 
 // 角色守卫：需 teacher/admin 角色；未登录返回 401，角色不足返回 403。
 bool require_staff(Database& db, const httplib::Request& req,
+                   httplib::Response& res, SessionUser& user);
+
+// 角色守卫：需 admin 角色；未登录返回 401，角色不足返回 403。
+bool require_admin(Database& db, const httplib::Request& req,
                    httplib::Response& res, SessionUser& user);
 
 // 角色守卫：需 student 角色；未登录返回 401，角色不符返回 403。

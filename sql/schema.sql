@@ -99,6 +99,18 @@ CREATE TABLE IF NOT EXISTS class_members (
         ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+-- 4.8 config 系统配置表
+CREATE TABLE IF NOT EXISTS config (
+    cfg_key   VARCHAR(64)  NOT NULL,
+    cfg_value VARCHAR(255) NOT NULL,
+    PRIMARY KEY (cfg_key)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 初始系统配置（幂等）
+-- teacher_invite_code：教师注册邀请码，学生注册时填写可注册为教师（管理员可改）。
+INSERT INTO config (cfg_key, cfg_value) VALUES ('teacher_invite_code', 'TEACH-2026')
+    ON DUPLICATE KEY UPDATE cfg_value = cfg_value;
+
 -- 初始管理员账号（幂等：已存在则跳过）
 -- 密码按 "<盐>:<sha256(密码+盐)>" 存储，admin 密码为 admin123（盐固定 1723700000）。
 INSERT INTO users (username, password, role, status)

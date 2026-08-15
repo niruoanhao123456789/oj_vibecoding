@@ -1,17 +1,8 @@
-// problems.js — 题目列表页逻辑（阶段 8：加入班级 + 题目列表）
+// problems.js — 题目列表页逻辑（阶段 7：筛选/搜索/状态徽标 + 阶段 8：加入班级）
 'use strict';
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({
-    '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
-  })[c]);
-}
-
-const DIFF = { 1: '简单', 2: '中等', 3: '困难' };
-
-function diffLabel(d) {
-  return DIFF[d] || '未知';
-}
+// 题目列表原始数据缓存（供筛选/搜索）
+let allProblems = [];
 
 function statusBadge(s) {
   if (s === 'AC') return '<span class="badge badge-ac">AC</span>';
@@ -20,29 +11,51 @@ function statusBadge(s) {
   return '<span class="muted">—</span>';
 }
 
-async function loadProblems() {
+function applyFilters() {
+  const diff = document.getElementById('diff-filter').value;
+  const kw = document.getElementById('search-input').value.trim().toLowerCase();
+
+  let list = allProblems;
+  if (diff !== 'all') {
+    list = list.filter((p) => String(p.difficulty) === diff);
+  }
+  if (kw) {
+    list = list.filter((p) => String(p.title).toLowerCase().includes(kw));
+  }
+  renderTable(list);
+}
+
+function renderTable(list) {
   const table = document.getElementById('problem-body');
   const empty = document.getElementById('empty-hint');
   table.innerHTML = '';
+  if (list.length === 0) {
+    empty.style.display = 'block';
+    empty.textContent =
+      allProblems.length === 0
+        ? '暂无可见题目。加入教师班级后可见本班题目。'
+        : '没有符合条件的题目。';
+    return;
+  }
+  empty.style.display = 'none';
+  list.forEach((p) => {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td>' + p.id + '</td>' +
+      '<td><a href="/pages/problem.html?id=' + p.id + '">' +
+      escapeHtml(p.title) + '</a></td>' +
+      '<td>' + diffLabel(p.difficulty) + '</td>' +
+      '<td>' + p.submit_count + ' / ' + p.pass_rate + '%</td>' +
+      '<td>' + statusBadge(p.my_status) + '</td>';
+    table.appendChild(tr);
+  });
+}
+
+async function loadProblems() {
   try {
     const data = await api('/api/problems');
-    const list = (data.data && data.data.problems) || [];
-    if (list.length === 0) {
-      empty.style.display = 'block';
-      return;
-    }
-    empty.style.display = 'none';
-    list.forEach((p) => {
-      const tr = document.createElement('tr');
-      tr.innerHTML =
-        '<td>' + p.id + '</td>' +
-        '<td><a href="/pages/problems.html?id=' + p.id + '">' +
-        escapeHtml(p.title) + '</a></td>' +
-        '<td>' + diffLabel(p.difficulty) + '</td>' +
-        '<td>' + p.submit_count + ' / ' + p.pass_rate + '%</td>' +
-        '<td>' + statusBadge(p.my_status) + '</td>';
-      table.appendChild(tr);
-    });
+    allProblems = (data.data && data.data.problems) || [];
+    applyFilters();
   } catch (err) {
     const el = document.getElementById('alert');
     showAlert(el, 'error', err.message);
@@ -91,4 +104,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   const form = document.getElementById('join-form');
   if (form) form.addEventListener('submit', handleJoin);
+  const diffSel = document.getElementById('diff-filter');
+  if (diffSel) diffSel.addEventListener('change', applyFilters);
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', applyFilters);
+  }
 });

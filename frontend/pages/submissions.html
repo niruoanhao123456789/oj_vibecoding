@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>提交记录 - OJ Vibecoding</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav id="main-nav"></nav>
+  <div class="container">
+    <div class="card">
+      <h1 class="page-title">提交记录</h1>
+      <div id="alert" class="alert"></div>
+
+      <div class="list-toolbar">
+        <select id="problem-filter">
+          <option value="all">全部题目</option>
+        </select>
+        <span class="muted" id="count-hint"></span>
+      </div>
+
+      <table class="table" id="submission-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>题目</th>
+            <th>语言</th>
+            <th>状态</th>
+            <th>耗时</th>
+            <th>内存</th>
+            <th>提交时间</th>
+          </tr>
+        </thead>
+        <tbody id="submission-body"></tbody>
+      </table>
+      <p id="empty-hint" class="empty-hint muted" style="display:none;">暂无提交记录。</p>
+    </div>
+  </div>
+  <script src="/js/common.js"></script>
+  <script src="/js/submissions.js"></script>
+</body>
+</html>

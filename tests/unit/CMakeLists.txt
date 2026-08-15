@@ -103,6 +103,8 @@ add_executable(oj_server_test server_test.cpp
   ${OJ_TEST_SRC_DIR}/src/problem.cpp
   ${OJ_TEST_SRC_DIR}/src/ojclass.cpp
   ${OJ_TEST_SRC_DIR}/src/submission.cpp
+  ${OJ_TEST_SRC_DIR}/src/admin/admin_problem.cpp
+  ${OJ_TEST_SRC_DIR}/src/admin/admin_user.cpp
   ${OJ_TEST_SRC_DIR}/src/judge/compiler.cpp
   ${OJ_TEST_SRC_DIR}/src/judge/compare.cpp
   ${OJ_TEST_SRC_DIR}/src/judge/queue.cpp

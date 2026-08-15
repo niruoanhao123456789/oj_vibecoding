@@ -18,6 +18,7 @@
 - 认证方式：Cookie 会话。登录成功后服务端通过 `Set-Cookie` 下发
   `oj_session=<64位十六进制token>; Path=/; HttpOnly; Max-Age=604800`（有效期 7 天），
   后续请求携带该 Cookie。未带/失效时返回 401。
+- 注册：可选 `teacher_code`，填写正确邀请码注册为教师（见 3.1）。
 - 请求体一律为 JSON（`Content-Type` 不限，按 body 解析）；JSON 解析失败或字段缺失/类型错误返回 400。
 
 ## 2. 错误码对照
@@ -26,11 +27,14 @@
 |---|---|---|
 | 400 | `PARAM_INVALID` | 参数缺失/类型错误/格式非法 |
 | 400 | `INVITE_CODE_INVALID` | 班级邀请码无效 |
+| 400 | `TEACHER_CODE_INVALID` | 教师注册邀请码无效 |
 | 401 | `NOT_AUTHENTICATED` | 未登录或会话已过期 |
 | 401 | `USER_NOT_FOUND` | 用户名不存在 |
 | 401 | `WRONG_PASSWORD` | 密码错误 |
 | 403 | `FORBIDDEN` | 权限不足（角色不符） |
 | 403 | `ACCOUNT_DISABLED` | 账号已被禁用 |
+| 403 | `CANNOT_MODIFY_SELF` | 不能对自己降级/禁用/删除，或内建 admin 不可操作 |
+| 403 | `LAST_ADMIN` | 系统必须保留至少一个管理员 |
 | 404 | `PROBLEM_NOT_FOUND` | 题目不存在或不可见 |
 | 404 | `SUBMISSION_NOT_FOUND` | 提交不存在或无权限查看 |
 | 409 | `USERNAME_EXISTS` | 用户名已存在 |
@@ -41,17 +45,18 @@
 
 ### 3.1 `POST /api/register` — 注册
 
-- **作用**：注册新用户，默认角色 `student`、状态正常。
+- **作用**：注册新用户。默认角色 `student`；请求体含 `teacher_code` 且与系统配置的教师邀请码一致时注册为 `teacher`。
 - **请求体**：
   ```json
-  { "username": "alice", "password": "secret123" }
+  { "username": "alice", "password": "secret123", "teacher_code": "TEACH-2026" }
   ```
+  `teacher_code` 可选；留空或不提供则为学生。
 - **参数校验**：`username` 长度 3–64，仅含字母/数字/下划线；`password` 长度 6–128。
 - **响应** `200`：
   ```json
-  { "ok": true, "data": { "username": "alice", "role": "student" } }
+  { "ok": true, "data": { "username": "alice", "role": "teacher" } }
   ```
-- **错误**：`400 PARAM_INVALID`（格式/长度非法）、`409 USERNAME_EXISTS`（用户名已存在）、`500 INTERNAL_ERROR`。
+- **错误**：`400 PARAM_INVALID`（格式/长度非法）、`400 TEACHER_CODE_INVALID`（教师邀请码无效）、`409 USERNAME_EXISTS`（用户名已存在）、`500 INTERNAL_ERROR`。
 
 ### 3.2 `POST /api/login` — 登录
 
@@ -324,15 +329,116 @@ PENDING → COMPILING → COMPILE_ERROR / COMPILE_TIMEOUT / RUNNING
 | `MLE` | 内存超限 | 超出测试点号与内存限制 |
 | `SYSTEM_ERROR` | 系统错误 | 判题异常/测试点缺失/数据库错误等 |
 
-## 10. 未实现接口（SPEC 规划中）
+## 10. 管理员用户管理接口
+
+### 10.1 `GET /api/admin/users` — 用户列表
+
+- **作用**：返回全部用户及班级信息。
+- **鉴权**：需 `admin` 角色。
+- **响应** `200`：
+  ```json
+  {
+    "ok": true,
+    "data": {
+      "users": [
+        {
+          "id": 1,
+          "username": "admin",
+          "role": "admin",
+          "status": 1,
+          "created_at": "2026-08-15 12:00:00",
+          "has_class": true,
+          "class_name": "默认班级"
+        }
+      ]
+    }
+  }
+  ```
+  - `has_class`：该用户是否为某班级教师；`class_name` 对应班级名（无则 null）。
+- **错误**：`401 NOT_AUTHENTICATED`、`403 FORBIDDEN`、`500 INTERNAL_ERROR`。
+
+### 10.2 `POST /api/admin/users` — 新增用户
+
+- **作用**：管理员创建用户（任意角色）。
+- **鉴权**：需 `admin` 角色。
+- **请求体**：
+  ```json
+  { "username": "alice", "password": "secret123", "role": "teacher" }
+  ```
+- **参数校验**：用户名/密码同注册规则；`role` 必须为 `student`/`teacher`/`admin`。
+- **响应** `200`：返回 `data.user`（结构同列表项）。
+- **错误**：`400 PARAM_INVALID`、`409 USERNAME_EXISTS`、`401/403`。
+
+### 10.3 `PUT /api/admin/users/:id` — 修改角色/状态
+
+- **作用**：修改用户角色或状态（禁用/启用）。
+- **鉴权**：需 `admin` 角色。
+- **请求体**（`role` 与 `status` 至少提供一个）：
+  ```json
+  { "role": "teacher", "status": 1 }
+  ```
+  `status`：`1` 正常 / `0` 禁用。
+- **联动**：把教师降级为 `student` 时，其班级（含成员）一并删除。
+- **保护规则**：禁止降级/禁用自己（`CANNOT_MODIFY_SELF`）；内建 `admin` 账号不可降级（`CANNOT_MODIFY_SELF`）；最后一个管理员不可降级（`LAST_ADMIN`）。
+- **响应** `200`：返回 `data.user`（含最新 `has_class`）。
+- **错误**：`400 PARAM_INVALID`、`403 CANNOT_MODIFY_SELF`/`LAST_ADMIN`、`404 USER_NOT_FOUND`。
+
+### 10.4 `DELETE /api/admin/users/:id` — 删除用户
+
+- **作用**：删除用户。其会话/提交/班级成员由外键级联删除；其班级随级联删除；其发布的题目 `created_by` 置 NULL（变全局题）。
+- **鉴权**：需 `admin` 角色。
+- **保护规则**：禁止删除自己（`CANNOT_MODIFY_SELF`）；内建 `admin` 账号不可删除（`CANNOT_MODIFY_SELF`）；最后一个管理员不可删除（`LAST_ADMIN`）。
+- **响应** `200`：`{ "ok": true, "data": {} }`。
+- **错误**：`403 CANNOT_MODIFY_SELF`/`LAST_ADMIN`、`404 USER_NOT_FOUND`。
+
+### 10.5 `GET /api/admin/config` — 读取系统配置
+
+- **作用**：返回教师注册邀请码。
+- **鉴权**：需 `admin` 角色。
+- **响应** `200`：
+  ```json
+  { "ok": true, "data": { "teacher_invite_code": "TEACH-2026" } }
+  ```
+
+### 10.6 `PUT /api/admin/config` — 修改系统配置
+
+- **作用**：修改教师注册邀请码（注册时填此码即成为教师）。
+- **鉴权**：需 `admin` 角色。
+- **请求体**：
+  ```json
+  { "teacher_invite_code": "NEW-CODE" }
+  ```
+- **响应** `200`：返回更新后的配置。
+
+## 11. 题目管理接口（教师/管理员）
+
+### 11.1 `POST /api/admin/problems/import` — 题目 JSON 导入
+
+- **作用**：导入题目（请求体即题目 JSON，格式见 SPEC 4.10）。管理员导入 → 全局题（`created_by` NULL，所有已入班学生可见）；教师导入 → 本班题（`created_by` 为教师 id）。
+- **鉴权**：需 `teacher` / `admin` 角色。
+- **请求体**：题目 JSON（含 `title`/`description`/`sample_in`/`sample_out` 及 `test_cases` 或 `test_dir`）。
+- **响应** `200`：`{ "ok": true, "data": { "id": 100 } }`。
+- **错误**：`400 PARAM_INVALID`（JSON 非法/字段校验失败/标题重复/目录缺失）、`401/403`。
+
+### 11.2 `PUT /api/admin/problems/:id` — 修改题目
+
+- **作用**：修改题目元数据；请求体含 `test_cases` 时整体替换隐藏测试点。
+- **鉴权**：需 `teacher` / `admin`。教师仅能改自己发布的题；管理员可改任意题。
+- **请求体**：题目 JSON（必填字段与导入一致）。
+- **错误**：`400 PARAM_INVALID`（无权限/校验失败/题目不存在）、`401/403`。
+
+### 11.3 `DELETE /api/admin/problems/:id` — 删除题目
+
+- **作用**：删除题目及其测试点目录；其提交记录由外键级联删除。
+- **鉴权**：需 `teacher` / `admin`。教师仅能删自己发布的题；管理员可删任意题。
+- **响应** `200`：`{ "ok": true, "data": {} }`。
+- **错误**：`400 PARAM_INVALID`（无权限/题目不存在）、`401/403`。
+
+## 12. 未实现接口（SPEC 规划中）
 
 以下路由在 `SPEC.md` 第 5 节中规划，但当前代码（`src/server.cpp`）尚未注册，**不可调用**：
 
-- `POST /api/admin/problems/import` — 题目 JSON 导入
-- `PUT /api/admin/problems/:id`、`DELETE /api/admin/problems/:id` — 题目修改/删除
 - `GET /api/admin/stats` — 教师统计
 - `GET /api/admin/submissions/export.csv` — 提交记录 CSV 导出
-- `GET /api/admin/users`、`PUT /api/admin/users` — 管理员用户管理
-- `GET /api/admin/config`、`PUT /api/admin/config` — 系统配置
 
 前端已实现的页面可参考 `frontend/pages/` 下的 HTML 与 `frontend/js/` 中的调用方式。

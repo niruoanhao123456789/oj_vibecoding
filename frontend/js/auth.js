@@ -78,7 +78,10 @@ async function handleRegister(e) {
   const btn = document.getElementById('submit-btn');
   btn.disabled = true;
   try {
-    await api('/api/register', { method: 'POST', body: { username, password } });
+    const teacherCode = (document.getElementById('teacher-code').value || '').trim();
+    const body = { username, password };
+    if (teacherCode) body.teacher_code = teacherCode;
+    await api('/api/register', { method: 'POST', body });
     window.location.href = '/pages/login.html?registered=1';
   } catch (err) {
     showAlert(alertEl, 'error', err.message);

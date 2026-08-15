@@ -7,6 +7,8 @@
 #include <sstream>
 
 #include "auth.h"
+#include "admin/admin_problem.h"
+#include "admin/admin_user.h"
 #include "judge/worker.h"
 #include "log.h"
 #include "ojclass.h"
@@ -123,16 +125,30 @@ bool Server::start() {
             send_error(res, 400, kErrParamInvalid, e);
             return;
         }
+        // 可选 teacher_code：填对则注册为教师，不填/留空则为学生
+        std::string role = "student";
+        std::string teacher_code;
+        bool has_code = read_json_field(req, "teacher_code", teacher_code);
+        if (has_code && !teacher_code.empty()) {
+            const std::string expected =
+                get_config_value(db_, "teacher_invite_code");
+            if (teacher_code != expected) {
+                send_error(res, 400, kErrTeacherCodeInvalid, "教师邀请码无效");
+                return;
+            }
+            role = "teacher";
+        }
         std::string err_code, err_msg;
-        if (!register_user(db_, username, password, err_code, err_msg)) {
+        if (!register_user(db_, username, password, role, err_code, err_msg)) {
             const int status = err_code == kErrUsernameExists ? 409 : 500;
             send_error(res, status, err_code, err_msg);
             return;
         }
-        LOG_INFO("user registered: %s", username.c_str());
+        LOG_INFO("user registered: %s (role=%s)", username.c_str(),
+                 role.c_str());
         Json::Value data;
         data["username"] = username;
-        data["role"] = "student";
+        data["role"] = role;
         send_ok(res, data);
     });
 
@@ -408,6 +424,257 @@ bool Server::start() {
                    data["id"] = static_cast<Json::UInt64>(sid);
                    send_ok(res, data);
                });
+
+    // ---- 管理员用户管理（阶段 8）----
+
+    // GET /api/admin/users：用户列表（仅管理员）
+    svr_->Get("/api/admin/users", [&](const httplib::Request& req,
+                                      httplib::Response& res) {
+        SessionUser user;
+        if (!require_admin(db_, req, res, user)) {
+            return;
+        }
+        Json::Value data;
+        if (!list_users(db_, data)) {
+            send_error(res, 500, kErrInternal, "用户列表查询失败");
+            return;
+        }
+        send_ok(res, data);
+    });
+
+    // POST /api/admin/users：管理员创建用户（仅管理员）
+    svr_->Post("/api/admin/users", [&](const httplib::Request& req,
+                                       httplib::Response& res) {
+        SessionUser user;
+        if (!require_admin(db_, req, res, user)) {
+            return;
+        }
+        std::string username, password, role;
+        if (!read_json_field(req, "username", username) ||
+            !read_json_field(req, "password", password) ||
+            !read_json_field(req, "role", role)) {
+            send_error(res, 400, kErrParamInvalid,
+                       "请求体必须是 JSON 且包含 username/password/role 字符串字段");
+            return;
+        }
+        std::string err_code, err_msg;
+        Json::Value data;
+        if (!create_user(db_, username, password, role, err_code, err_msg,
+                         data)) {
+            const int status = err_code == kErrUsernameExists ? 409 : 400;
+            send_error(res, status, err_code, err_msg);
+            return;
+        }
+        LOG_INFO("admin created user: %s (role=%s) by %s", username.c_str(),
+                 role.c_str(), user.username.c_str());
+        send_ok(res, data);
+    });
+
+    // PUT /api/admin/users/:id：修改角色/状态（仅管理员）
+    svr_->Put(R"(/api/admin/users/(\d+))",
+              [&](const httplib::Request& req, httplib::Response& res) {
+                  SessionUser user;
+                  if (!require_admin(db_, req, res, user)) {
+                      return;
+                  }
+                  const unsigned int target = static_cast<unsigned int>(
+                      std::strtoul(req.matches[1].str().c_str(), nullptr, 10));
+                  std::string role;
+                  const bool has_role = read_json_field(req, "role", role);
+                  int status = -1;
+                  if (!req.body.empty()) {
+                      Json::Value root;
+                      Json::CharReaderBuilder builder;
+                      std::string errs;
+                      std::istringstream in(req.body);
+                      if (Json::parseFromStream(builder, in, &root, &errs) &&
+                          root.isObject() && root.isMember("status") &&
+                          root["status"].isInt()) {
+                          status = root["status"].asInt();
+                          if (status != 0 && status != 1) {
+                              send_error(res, 400, kErrParamInvalid,
+                                         "status 必须为 0 或 1");
+                              return;
+                          }
+                      }
+                  }
+                  if (!has_role && status < 0) {
+                      send_error(res, 400, kErrParamInvalid,
+                                 "至少提供一个要修改的字段（role 或 status）");
+                      return;
+                  }
+                  std::string err_code, err_msg;
+                  Json::Value data;
+                  if (!update_user(db_, user.id, target, role, status, err_code,
+                                   err_msg, data)) {
+                      const int http =
+                          err_code == kErrUserNotFound
+                              ? 404
+                              : err_code == kErrParamInvalid ? 400 : 403;
+                      send_error(res, http, err_code, err_msg);
+                      return;
+                  }
+                  LOG_INFO("admin updated user: id=%u by %s", target,
+                           user.username.c_str());
+                  send_ok(res, data);
+              });
+
+    // DELETE /api/admin/users/:id：删除用户（仅管理员）
+    svr_->Delete(R"(/api/admin/users/(\d+))",
+                 [&](const httplib::Request& req, httplib::Response& res) {
+                     SessionUser user;
+                     if (!require_admin(db_, req, res, user)) {
+                         return;
+                     }
+                     const unsigned int target = static_cast<unsigned int>(
+                         std::strtoul(req.matches[1].str().c_str(), nullptr, 10));
+                     std::string err_code, err_msg;
+                     if (!delete_user(db_, user.id, target, err_code, err_msg)) {
+                         const int http =
+                             err_code == kErrUserNotFound ? 404 : 403;
+                         send_error(res, http, err_code, err_msg);
+                         return;
+                     }
+                     LOG_INFO("admin deleted user: id=%u by %s", target,
+                              user.username.c_str());
+                     send_ok(res, Json::Value(Json::objectValue));
+                 });
+
+    // GET /api/admin/config：系统配置（仅管理员）
+    svr_->Get("/api/admin/config", [&](const httplib::Request& req,
+                                       httplib::Response& res) {
+        SessionUser user;
+        if (!require_admin(db_, req, res, user)) {
+            return;
+        }
+        Json::Value data;
+        data["teacher_invite_code"] = get_config_value(db_, "teacher_invite_code");
+        send_ok(res, data);
+    });
+
+    // PUT /api/admin/config：修改系统配置（仅管理员）
+    svr_->Put("/api/admin/config", [&](const httplib::Request& req,
+                                       httplib::Response& res) {
+        SessionUser user;
+        if (!require_admin(db_, req, res, user)) {
+            return;
+        }
+        std::string code;
+        if (!read_json_field(req, "teacher_invite_code", code) || code.empty()) {
+            send_error(res, 400, kErrParamInvalid,
+                       "请求体必须是 JSON 且包含非空 teacher_invite_code 字段");
+            return;
+        }
+        if (code.size() > 255) {
+            send_error(res, 400, kErrParamInvalid, "邀请码长度不能超过 255");
+            return;
+        }
+        if (!set_config_value(db_, "teacher_invite_code", code)) {
+            send_error(res, 500, kErrInternal, "配置写入失败");
+            return;
+        }
+        LOG_INFO("admin updated config: teacher_invite_code by %s",
+                 user.username.c_str());
+        Json::Value data;
+        data["teacher_invite_code"] = code;
+        send_ok(res, data);
+    });
+
+    // ---- 题目管理（阶段 8，教师/管理员）----
+
+    // POST /api/admin/problems/import：题目 JSON 导入
+    // 教师导入 → 本班题；管理员导入 → 全局题
+    svr_->Post("/api/admin/problems/import",
+               [&](const httplib::Request& req, httplib::Response& res) {
+                   SessionUser user;
+                   if (!require_staff(db_, req, res, user)) {
+                       return;
+                   }
+                   if (req.body.empty()) {
+                       send_error(res, 400, kErrParamInvalid,
+                                  "请求体必须为题目 JSON");
+                       return;
+                   }
+                   Json::Value root;
+                   Json::CharReaderBuilder builder;
+                   std::string errs;
+                   std::istringstream in(req.body);
+                   if (!Json::parseFromStream(builder, in, &root, &errs)) {
+                       send_error(res, 400, kErrParamInvalid,
+                                  "题目 JSON 解析失败");
+                       return;
+                   }
+                   const unsigned int created_by =
+                       user.role == "admin" ? 0 : user.id;
+                   try {
+                       const unsigned long long id = import_problem_json(
+                           db_, root, cfg_.data_dir + "/problems", created_by);
+                       LOG_INFO("problem imported: id=%llu by %s", id,
+                                user.username.c_str());
+                       Json::Value data;
+                       data["id"] = static_cast<Json::UInt64>(id);
+                       send_ok(res, data);
+                   } catch (const std::exception& e) {
+                       send_error(res, 400, kErrParamInvalid, e.what());
+                   }
+               });
+
+    // PUT /api/admin/problems/:id：修改题目（教师仅自己的题；管理员任意）
+    svr_->Put(R"(/api/admin/problems/(\d+))",
+              [&](const httplib::Request& req, httplib::Response& res) {
+                  SessionUser user;
+                  if (!require_staff(db_, req, res, user)) {
+                      return;
+                  }
+                  const unsigned long long id = std::strtoull(
+                      req.matches[1].str().c_str(), nullptr, 10);
+                  if (req.body.empty()) {
+                      send_error(res, 400, kErrParamInvalid,
+                                 "请求体必须为题目 JSON");
+                      return;
+                  }
+                  Json::Value root;
+                  Json::CharReaderBuilder builder;
+                  std::string errs;
+                  std::istringstream in(req.body);
+                  if (!Json::parseFromStream(builder, in, &root, &errs)) {
+                      send_error(res, 400, kErrParamInvalid,
+                                 "题目 JSON 解析失败");
+                      return;
+                  }
+                  try {
+                      update_problem_json(db_, id, root,
+                                          cfg_.data_dir + "/problems",
+                                          user.role, user.id);
+                      LOG_INFO("problem updated: id=%llu by %s", id,
+                               user.username.c_str());
+                      Json::Value data;
+                      data["id"] = static_cast<Json::UInt64>(id);
+                      send_ok(res, data);
+                  } catch (const std::exception& e) {
+                      send_error(res, 400, kErrParamInvalid, e.what());
+                  }
+              });
+
+    // DELETE /api/admin/problems/:id：删除题目（教师仅自己的题；管理员任意）
+    svr_->Delete(R"(/api/admin/problems/(\d+))",
+                 [&](const httplib::Request& req, httplib::Response& res) {
+                     SessionUser user;
+                     if (!require_staff(db_, req, res, user)) {
+                         return;
+                     }
+                     const unsigned long long id = std::strtoull(
+                         req.matches[1].str().c_str(), nullptr, 10);
+                     try {
+                         delete_problem_json(db_, id, cfg_.data_dir + "/problems",
+                                             user.role, user.id);
+                         LOG_INFO("problem deleted: id=%llu by %s", id,
+                                  user.username.c_str());
+                         send_ok(res, Json::Value(Json::objectValue));
+                     } catch (const std::exception& e) {
+                         send_error(res, 400, kErrParamInvalid, e.what());
+                     }
+                 });
 
     LOG_INFO("listening on %s:%d", cfg_.host.c_str(), cfg_.port);
     svr_->listen(cfg_.host, cfg_.port);

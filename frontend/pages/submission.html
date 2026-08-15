@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>提交详情 - OJ Vibecoding</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav id="main-nav"></nav>
+  <div class="container">
+    <div class="card">
+      <h1 class="page-title">提交详情</h1>
+      <div id="alert" class="alert"></div>
+      <div id="loading" class="muted">加载中…</div>
+
+      <div id="sub-content" style="display:none;">
+        <div class="problem-meta" id="sub-meta"></div>
+
+        <div class="timeline" id="timeline"></div>
+
+        <div class="result-box" id="result-box">
+          <div class="result-row">
+            <span>状态</span>
+            <span id="result-status"></span>
+          </div>
+          <div class="result-row">
+            <span>耗时</span>
+            <span id="result-time"></span>
+          </div>
+          <div class="result-row">
+            <span>内存</span>
+            <span id="result-memory"></span>
+          </div>
+          <div id="result-error" class="result-error" style="display:none;"></div>
+        </div>
+
+        <h2 style="font-size:15px;margin:20px 0 8px;">提交代码</h2>
+        <pre class="code-block" id="sub-code"></pre>
+      </div>
+    </div>
+  </div>
+  <script src="/js/common.js"></script>
+  <script src="/js/submission.js"></script>
+</body>
+</html>

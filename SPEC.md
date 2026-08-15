@@ -13,13 +13,13 @@
 
 | 角色 | 能力 |
 |---|---|
-| 学生 | 凭邀请码加入教师班级、浏览本班可见题目、提交代码、查看判题结果/历史/个人统计 |
-| 教师 | 学生能力 + 创建班级/生成邀请码、增改删题、JSON 导入题目、查看提交统计、导出 CSV |
-| 管理员 | 教师能力 + 用户管理（增删改、角色调整）、管理测试用例与系统配置 |
+| 学生 | 凭邀请码加入教师班级、浏览本班可见题目、提交代码、查看判题结果/历史/个人统计；注册时可凭管理员下发的教师邀请码直接注册为教师 |
+| 教师 | 学生能力 + 创建班级/生成邀请码、增改删题、JSON 导入题目（本班题）、查看提交统计、导出 CSV |
+| 管理员 | 教师能力 + 用户管理（增删改、角色调整）、管理测试用例与系统配置（含教师注册邀请码）、发布全局题目（不创建班级） |
 
 ## 3. 核心业务规则
 
-- **题目**：初始 ≤10 题，JSON 文件导入；每题的隐藏测试点与学生可见样例分离。题目按班级隔离，可见性见 4.8。
+- **题目**：初始 ≤10 题，JSON 文件导入；每题的隐藏测试点与学生可见样例分离。题目按班级隔离，可见性见 4.9。
 - **班级**：一名教师一个班级，教师生成班级邀请码；学生凭邀请码加入后可见该教师发布的题目（及全局题）。
 - **判题**：仅支持 C++ 与 C（g++ / gcc），不支持 Java、Python。异步判题：提交 → PENDING → 2-4 个 worker 并发判 → 结果入库 → 前端轮询。
 - **判题限制**：CPU 时间上限、内存上限、总超时；超限判 TLE/MLE。
@@ -103,7 +103,18 @@
 
 主键 `(class_id, student_id)`；学生可加入多个教师的班级，每个班级内唯一。
 
-### 4.7 索引与约束
+### 4.7 config — 系统配置表
+
+| 字段 | 类型 | 约束/默认 | 说明 |
+|---|---|---|---|
+| cfg_key | VARCHAR(64) | 主键 | 配置键 |
+| cfg_value | VARCHAR(255) | NOT NULL | 配置值 |
+
+| 配置键 | 默认值 | 说明 |
+|---|---|---|
+| `teacher_invite_code` | `TEACH-2026` | 教师注册邀请码。注册时填写正确邀请码即注册为教师；留空注册为学生。管理员可通过管理端修改 |
+
+### 4.8 索引与约束
 
 - `users.username` UNIQUE；`users.role` 普通索引。
 - `sessions.token` 主键；`sessions.user_id` 索引 + 外键。
@@ -112,7 +123,7 @@
 - `classes.teacher_id` UNIQUE（一名教师一个班）；`classes.invite_code` UNIQUE。
 - `class_members` 主键 `(class_id, student_id)`；`student_id` 普通索引；`class_id`/`student_id` 外键。
 
-### 4.8 题目可见性规则
+### 4.9 题目可见性规则
 
 题目按班级隔离：
 - **教师/管理员**：可查看全部题目。
@@ -121,7 +132,7 @@
 
 全局题对任何已入班学生可见；入班学生通过教师发布的邀请码加入班级。
 
-### 4.9 题目 JSON 格式（导入源）
+### 4.10 题目 JSON 格式（导入源）
 
 每个题目一个 JSON 文件，由 `oj_import` 导入器解析校验后写入 `problems` 表，
 隐藏测试点落盘到 `data/problems/<problem_id>/`（`{编号}.in` / `{编号}.out` 成对文件）。
@@ -185,12 +196,12 @@
 
 ## 5. API 边界（REST JSON，/api 前缀）
 
-- 认证：`POST /api/register` `POST /api/login` `POST /api/logout` `GET /api/me`
-- 题目：`GET /api/problems` `GET /api/problems/:id`（按 4.8 可见性规则过滤）
+- 认证：`POST /api/register`（可选 `teacher_code`，填对注册为教师）`POST /api/login` `POST /api/logout` `GET /api/me`
+- 题目：`GET /api/problems` `GET /api/problems/:id`（按 4.9 可见性规则过滤）
 - 班级：`POST /api/class/join`（学生凭邀请码加入班级）
 - 提交：`POST /api/submissions`（参数含 `language`，仅接受 `cpp`/`c`）`GET /api/submissions?user_id=` `GET /api/submissions/:id`（轮询判题状态）
 - 教师/管理员：`GET/POST /api/admin/class` `POST /api/admin/class/invite` `POST /api/admin/problems/import` `PUT/DELETE /api/admin/problems/:id` `GET /api/admin/stats` `GET /api/admin/submissions/export.csv`
-- 管理员：`GET/PUT /api/admin/users` `GET/PUT /api/admin/config`
+- 管理员：`GET/POST /api/admin/users` `PUT/DELETE /api/admin/users/:id` `GET/PUT /api/admin/config`
 
 ## 6. 架构图
 
@@ -231,7 +242,7 @@ oj_vibecoding/
 │   ├── config.h / config.cpp      # 配置加载
 │   ├── db.h / db.cpp              # MySQL 访问层（参数化查询）
 │   ├── hash.h / hash.cpp          # 密码简单加密（时间戳盐 + SHA-256）
-│   ├── problem.h / problem.cpp    # 题目 JSON 格式解析 + 导入器
+│   ├── problem.h / problem.cpp    # 题目 JSON 格式解析 + 导入/更新/删除
 │   ├── auth.h / auth.cpp          # 注册/登录/登出/Session 中间件
 │   ├── ojclass.h / ojclass.cpp    # 班级管理（建班/邀请码/学生入班/可见性）
 │   ├── submission.h / submission.cpp  # 提交 API + 轮询查询
@@ -242,9 +253,9 @@ oj_vibecoding/
 │   │   ├── queue.h / queue.cpp        # 判题任务队列
 │   │   └── worker.h / worker.cpp      # worker 池（2-4 线程）
 │   └── admin/
-│       ├── admin_problem.h / .cpp     # 教师题目 CRUD/导入
-│       ├── admin_stats.h / .cpp       # 统计与 CSV 导出
-│       └── admin_user.h / .cpp        # 管理员用户管理
+│       ├── admin_problem.h / .cpp     # 教师/管理员题目导入/修改/删除
+│       ├── admin_stats.h / .cpp       # 统计与 CSV 导出（阶段 8 规划）
+│       └── admin_user.h / .cpp        # 管理员用户管理 + 系统配置读写
 ├── tools/
 │   └── oj_import.cpp              # 命令行题目导入工具（阶段 2 验证用）
 ├── frontend/
@@ -255,7 +266,7 @@ oj_vibecoding/
 │   │   ├── common.js               # fetch 封装/登录态/状态徽标/轮询工具
 │   │   ├── auth.js                 # 登录/注册页逻辑
 │   │   ├── problems.js             # 题目列表页逻辑
-│   │   ├── problem.js              # 题目详情页逻辑
+│   │   ├── problem.js              # 题目详情页逻辑（含编辑器增强：光标行高亮/Tab 缩进/括号补全）
 │   │   ├── submissions.js          # 提交历史页逻辑
 │   │   ├── submission.js           # 提交详情页逻辑
 │   │   ├── stats.js                # 个人统计页逻辑
@@ -297,7 +308,7 @@ oj_vibecoding/
 
 ### 7.2 注册页
 - 用户名 + 密码 + 确认密码表单，前端做基础校验（非空、两次密码一致、用户名长度）。
-- 默认注册为「学生」角色；注册成功自动跳转登录页。
+- 可选「教师邀请码」输入框：填写正确邀请码注册为教师，留空注册为「学生」；注册成功自动跳转登录页。
 
 ### 7.3 题目列表页
 - 展示可见题目：题号、标题、难度、提交数 / 通过率。
@@ -308,6 +319,7 @@ oj_vibecoding/
 ### 7.4 题目详情页
 - 左侧：题目描述、输入/输出格式、数据范围、学生可见样例（输入/输出）。
 - 右侧：代码编辑器（textarea + 简单高亮/行号）、语言固定 C++/C（支持选择 C++ 或 C）、提交按钮。
+- 编辑器增强：光标所在行高亮（随光标/滚动同步）；`Tab` 缩进 4 个空格（多行选区整体缩进）；输入 `(`/`[`/`{`/`"`/`'` 自动补全成对符号（引号在标识符中间时不补全）、右符自动跳过、空成对符号内退格一次删除两个。
 - 提交后进入判题状态展示：通过轮询实时显示 PENDING → COMPILING → RUNNING → 最终结果。
 - 判题完成后展示结果状态、耗时、内存占用；WA 时展示首个失败的测试点输入/期望输出/实际输出。
 
@@ -324,12 +336,14 @@ oj_vibecoding/
 ### 7.8 后端管理页面
 - **教师管理端**：
   - 班级管理：创建班级、查看/重置班级邀请码、查看班级成员列表。
-  - 题目管理：JSON 导入题目（含样例与隐藏测试点）、题目列表 CRUD（编辑、删除）。
+  - 题目管理：JSON 导入题目（含样例与隐藏测试点）、题目列表 CRUD（编辑、删除，仅限本人发布的题）。
   - 统计查看：各题提交数、AC 率、学生提交情况。
   - 提交记录导出：按题目/用户导出 CSV。
-- **管理员管理端**：
-  - 用户管理：用户列表、新增/禁用/删除、角色调整（学生/教师/管理员）。
-  - 测试用例与系统配置管理：修改判题限制（时间/内存上限）、维护测试用例文件。
+- **管理员管理端**（不创建班级）：
+  - 用户管理：用户列表、新增、禁用/启用、删除、角色调整（学生/教师/管理员）。
+  - 系统配置：查看/修改教师注册邀请码。
+  - 题目管理：发布全局题（created_by 为 NULL）、修改/删除任意题目。
+  - 保护规则：禁止对自己降级/禁用/删除；禁止删除或降级最后一个管理员；内建 `admin` 账号不可降级/删除；删除教师或把教师降级为 student 时，若其有班级需二次确认且班级一并删除。
 
 ## 8. 安全
 
@@ -351,7 +365,7 @@ oj_vibecoding/
 ### 阶段 2：数据层
 - [x] 编写 `sql/schema.sql`：按第 4 章建 6 张表 + 索引 + 外键 + 初始管理员账号
 - [x] 封装 DB 访问层（`db.*`）：连接管理、参数化查询辅助函数
-- [x] 定义题目 JSON 格式（title/description/sample_in/sample_out/time_limit_ms/memory_limit_mb/test_cases 或 test_dir 引用），见 4.6 节
+- [x] 定义题目 JSON 格式（title/description/sample_in/sample_out/time_limit_ms/memory_limit_mb/test_cases 或 test_dir 引用），见 4.10 节
 - [x] 编写 JSON 题目导入器（`problem.*`）：解析 JSON、校验字段、写 problems 表、将隐藏测试点写入 `test_dir`；命令行工具 `tools/oj_import.cpp` + `scripts/import_problem.sh`
 - [x] 验证：`oj_import` 导入示例题目（`problems/aplusb` test_dir 模式、`problems/greet` 内联模式），DB 中数据与测试点文件齐全；重复标题/目录缺失回滚无脏数据
 
@@ -395,22 +409,23 @@ oj_vibecoding/
 - [x] 验证：提交后轮询能观察到 PENDING→…→终态全过程
 
 ### 阶段 7：前端全页面
-- [ ] 公共框架：导航栏（含登录态）、样式表、公共 JS（fetch 封装、状态徽标渲染、轮询工具）
-- [ ] 题目列表页（筛选/搜索/状态徽标）
-- [ ] 题目详情页（左侧题目区 + 右侧代码编辑器 + 提交按钮 + 轮询结果区）
-- [ ] 提交历史页、提交详情页
-- [ ] 个人统计页
-- [ ] 验证：全页面在浏览器手动走通完整流程
+- [x] 公共框架：导航栏（含登录态）、样式表、公共 JS（fetch 封装、状态徽标渲染、轮询工具）
+- [x] 题目列表页（筛选/搜索/状态徽标）
+- [x] 题目详情页（左侧题目区 + 右侧代码编辑器 + 提交按钮 + 轮询结果区；编辑器含光标行高亮/Tab 缩进/括号引号补全）
+- [x] 提交历史页、提交详情页
+- [x] 个人统计页
+- [x] 验证：全页面在浏览器手动走通完整流程
 
 ### 阶段 8：管理端
-- [ ] 教师班级管理：创建班级、生成/重置邀请码、查看成员（`GET/POST /api/admin/class`、`POST /api/admin/class/invite`）
-- [ ] 学生加入班级：`POST /api/class/join`（凭邀请码）；题目可见性按 4.8 规则过滤
-- [ ] 教师题目管理页：JSON 导入表单、题目列表（编辑/删除）
+- [x] 教师班级管理：创建班级、生成/重置邀请码、查看成员（`GET/POST /api/admin/class`、`POST /api/admin/class/invite`）
+- [x] 学生加入班级：`POST /api/class/join`（凭邀请码）；题目可见性按 4.9 规则过滤
+- [x] 教师题目管理页：JSON 导入表单、题目列表（编辑/删除，仅限本人发布的题）
 - [ ] 教师统计页 + CSV 导出（`GET /api/admin/submissions/export.csv`）
-- [ ] `POST /api/admin/problems/import`、`PUT/DELETE /api/admin/problems/:id`
-- [ ] 管理员用户管理页：用户列表/新增/禁用/删除/角色调整
+- [x] `POST /api/admin/problems/import`（教师导入本班题、管理员导入全局题）、`PUT/DELETE /api/admin/problems/:id`
+- [x] 管理员用户管理页：用户列表/新增/禁用/删除/角色调整 + 保护规则 + 有班级教师的删除/降级二次确认与班级联动删除
+- [x] 注册教师邀请码：`GET/PUT /api/admin/config`（教师注册邀请码管理），注册时填写即成为教师
 - [ ] 管理员配置页：判题限制（时间/内存上限）、测试用例维护
-- [ ] 验证：教师建班→学生凭邀请码入班→学生可见该师题目；未入班学生列表为空；学生访问管理接口返回 403
+- [x] 验证：教师建班→学生凭邀请码入班→学生可见该师题目；未入班学生列表为空；学生访问管理接口返回 403
 
 ### 阶段 9：日志 + 测试
 - [ ] 统一日志模块：记录启动、请求、判题事件、错误；按天滚动

@@ -43,6 +43,11 @@ struct ProblemData {
 // 解析题目 JSON 文件并校验字段；失败抛 std::runtime_error。
 ProblemData parse_problem_json(const std::string& json_path);
 
+// 从 JSON 值解析并校验题目数据；base_dir 用于解析相对 test_dir 路径。
+// 失败抛 std::runtime_error。
+ProblemData parse_problem_json_value(const Json::Value& root,
+                                     const std::string& base_dir = "");
+
 // 导入题目：唯一性预检 → 写 problems 表 → 将隐藏测试点落盘到
 // test_root/<id>/ → 回填 test_dir，返回题目 id。
 // created_by 为 0 时该字段置 NULL。
@@ -50,6 +55,16 @@ ProblemData parse_problem_json(const std::string& json_path);
 unsigned long long import_problem(Database& db, const ProblemData& data,
                                   const std::string& test_root,
                                   unsigned int created_by = 0);
+
+// 更新题目元数据；data.test_cases 非空时整体替换隐藏测试点。
+// 唯一标题校验排除自身。失败抛 std::runtime_error。
+unsigned long long update_problem(Database& db, unsigned long long id,
+                                  const ProblemData& data,
+                                  const std::string& test_root);
+
+// 删除题目：删行 + 删测试点目录。题目不存在返回 false。
+bool delete_problem(Database& db, unsigned long long id,
+                    const std::string& test_root);
 
 // ---- 题目查询 API（阶段 4）----
 

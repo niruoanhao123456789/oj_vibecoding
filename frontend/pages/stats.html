@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>我的统计 - OJ Vibecoding</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav id="main-nav"></nav>
+  <div class="container">
+    <div class="card">
+      <h1 class="page-title">我的统计</h1>
+      <div id="alert" class="alert"></div>
+      <div id="loading" class="muted">加载中…</div>
+
+      <div id="stats-content" style="display:none;">
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-num" id="stat-total">0</div>
+            <div class="stat-label">提交总数</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="stat-ac">0</div>
+            <div class="stat-label">AC 数</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="stat-rate">0%</div>
+            <div class="stat-label">通过率（AC/提交）</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="stat-problems">0</div>
+            <div class="stat-label">作答题目数</div>
+          </div>
+        </div>
+
+        <h2 style="font-size:16px;margin:20px 0 10px;">各题目状态</h2>
+        <table class="table" id="problem-stats-table">
+          <thead>
+            <tr>
+              <th>题目</th>
+              <th>提交数</th>
+              <th>AC 数</th>
+              <th>最佳状态</th>
+            </tr>
+          </thead>
+          <tbody id="problem-stats-body"></tbody>
+        </table>
+        <p id="problem-stats-empty" class="empty-hint muted" style="display:none;">暂无提交记录。</p>
+
+        <h2 style="font-size:16px;margin:20px 0 10px;">提交时间分布</h2>
+        <table class="table" id="daily-table">
+          <thead>
+            <tr>
+              <th>日期</th>
+              <th>提交数</th>
+              <th>AC 数</th>
+            </tr>
+          </thead>
+          <tbody id="daily-body"></tbody>
+        </table>
+        <p id="daily-empty" class="empty-hint muted" style="display:none;">暂无数据。</p>
+      </div>
+    </div>
+  </div>
+  <script src="/js/common.js"></script>
+  <script src="/js/stats.js"></script>
+</body>
+</html>

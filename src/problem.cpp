@@ -110,8 +110,11 @@ static int parse_difficulty(const Json::Value& v) {
     return d;
 }
 
-ProblemData parse_problem_json(const std::string& json_path) {
-    Json::Value root = parse_json_file(json_path);
+ProblemData parse_problem_json_value(const Json::Value& root,
+                                     const std::string& base_dir) {
+    if (!root.isObject()) {
+        throw std::runtime_error("invalid problem json: root must be an object");
+    }
 
     ProblemData d;
     d.title = trim(require_string(root, "title"));
@@ -138,8 +141,8 @@ ProblemData parse_problem_json(const std::string& json_path) {
             throw std::runtime_error("field must be a non-empty string: test_dir");
         }
         fs::path resolved(root["test_dir"].asString());
-        if (resolved.is_relative()) {
-            resolved = fs::path(json_path).parent_path() / resolved;
+        if (resolved.is_relative() && !base_dir.empty()) {
+            resolved = fs::path(base_dir) / resolved;
         }
         d.src_test_dir = resolved.lexically_normal().string();
     }
@@ -176,6 +179,11 @@ ProblemData parse_problem_json(const std::string& json_path) {
         throw std::runtime_error("no test cases: provide test_dir or test_cases");
     }
     return d;
+}
+
+ProblemData parse_problem_json(const std::string& json_path) {
+    Json::Value root = parse_json_file(json_path);
+    return parse_problem_json_value(root, fs::path(json_path).parent_path().string());
 }
 
 // ---------- 测试点落盘 ----------
@@ -302,6 +310,102 @@ unsigned long long import_problem(Database& db, const ProblemData& data,
         throw std::runtime_error("failed to update test_dir: " + db.error());
     }
     return id;
+}
+
+// 更新题目元数据；data.test_cases 非空时整体替换隐藏测试点。
+// 唯一标题校验排除自身。返回题目 id。任一步失败抛 std::runtime_error。
+// 替换测试点时：先写临时目录，成功后原子替换 test_dir，避免中途失败留脏。
+unsigned long long update_problem(Database& db, unsigned long long id,
+                                  const ProblemData& data,
+                                  const std::string& test_root) {
+    // 1. 校验题目存在
+    auto exist = db.query("SELECT id, test_dir FROM problems WHERE id = ?", id);
+    if (!exist || exist->row_count() == 0) {
+        throw std::runtime_error("problem not found: " + std::to_string(id));
+    }
+    const std::string old_test_dir = exist->cell(0, 1).as_string();
+
+    // 2. 唯一标题校验（排除自身）
+    auto dup = db.query(
+        "SELECT id FROM problems WHERE title = ? AND id <> ?", data.title, id);
+    if (dup && dup->row_count() > 0) {
+        throw std::runtime_error("problem title already exists: " + data.title);
+    }
+
+    const bool replace_cases = !data.test_cases.empty();
+
+    // 3. 更新元数据
+    if (!db.execute(
+            "UPDATE problems SET title = ?, description = ?, sample_in = ?, "
+            "sample_out = ?, time_limit_ms = ?, memory_limit_mb = ?, "
+            "difficulty = ? WHERE id = ?",
+            data.title, data.description, data.sample_in, data.sample_out,
+            data.time_limit_ms, data.memory_limit_mb, data.difficulty, id)) {
+        throw std::runtime_error("failed to update problem: " + db.error());
+    }
+
+    // 4. 需要替换测试点时，写临时目录再原子替换
+    if (replace_cases) {
+        const fs::path dir = fs::path(test_root) / std::to_string(id);
+        const fs::path tmp = fs::path(test_root) / (std::to_string(id) + ".tmp");
+        try {
+            remove_dir(tmp);
+            ensure_dir(tmp);
+            write_inline_cases(tmp, data);
+            // 备份旧目录 → 移动新目录 → 删除备份
+            const fs::path bak = fs::path(test_root) /
+                                 (std::to_string(id) + ".bak");
+            if (fs::exists(dir)) {
+                remove_dir(bak);
+                std::error_code ec;
+                fs::rename(dir, bak, ec);
+                if (ec) {
+                    throw std::runtime_error("backup old test dir failed: " +
+                                             ec.message());
+                }
+            }
+            {
+                std::error_code ec;
+                fs::rename(tmp, dir, ec);
+                if (ec) {
+                    // 还原备份
+                    if (fs::exists(bak)) {
+                        std::error_code ec2;
+                        fs::rename(bak, dir, ec2);
+                    }
+                    throw std::runtime_error("replace test dir failed: " +
+                                             ec.message());
+                }
+            }
+            remove_dir(bak);
+        } catch (...) {
+            remove_dir(tmp);
+            throw;
+        }
+    }
+    return id;
+}
+
+// 删除题目：删行 + 删除测试点目录（提交由外键级联删除）。
+bool delete_problem(Database& db, unsigned long long id,
+                    const std::string& test_root) {
+    auto exist = db.query("SELECT id, test_dir FROM problems WHERE id = ?", id);
+    if (!exist || exist->row_count() == 0) {
+        return false;
+    }
+    if (!db.execute("DELETE FROM problems WHERE id = ?", id)) {
+        throw std::runtime_error("failed to delete problem: " + db.error());
+    }
+    // 删除测试点目录（test_dir 可能为空串占位）
+    std::string dir = exist->cell(0, 1).as_string();
+    if (dir.empty()) {
+        dir = (fs::path(test_root) / std::to_string(id)).string();
+    }
+    remove_dir(dir);
+    // 清理可能遗留的临时/备份目录
+    remove_dir(fs::path(test_root) / (std::to_string(id) + ".tmp"));
+    remove_dir(fs::path(test_root) / (std::to_string(id) + ".bak"));
+    return true;
 }
 
 // ---------- 题目查询（阶段 4） ----------

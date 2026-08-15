@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>题目详情 - OJ Vibecoding</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <nav id="main-nav"></nav>
+  <div class="container">
+    <div id="alert" class="alert"></div>
+    <div id="loading" class="card">
+      <p class="muted">加载中…</p>
+    </div>
+
+    <div id="problem-content" class="problem-layout" style="display:none;">
+      <div class="card">
+        <h1 class="page-title" id="problem-title"></h1>
+        <div class="problem-meta" id="problem-meta"></div>
+
+        <div class="problem-section">
+          <h2>题目描述</h2>
+          <div class="description" id="problem-desc"></div>
+        </div>
+
+        <div class="problem-section">
+          <h2>样例输入</h2>
+          <div class="sample-block"><pre id="sample-in"></pre></div>
+        </div>
+
+        <div class="problem-section">
+          <h2>样例输出</h2>
+          <div class="sample-block"><pre id="sample-out"></pre></div>
+        </div>
+      </div>
+
+      <div class="card editor-card">
+        <h2>提交代码</h2>
+        <div class="editor-toolbar">
+          <select id="lang-select">
+            <option value="cpp">C++</option>
+            <option value="c">C</option>
+          </select>
+          <button type="button" id="submit-btn" class="btn">提交</button>
+        </div>
+        <div class="editor-wrap">
+          <div class="editor-line-numbers" id="line-numbers"></div>
+          <div class="editor-cursor-line" id="cursor-line"></div>
+          <pre class="editor-highlight" id="editor-highlight"></pre>
+          <textarea id="code-editor" class="editor-textarea" spellcheck="false"
+                    placeholder="#include &lt;iostream&gt;
+using namespace std;
+
+int main() {
+    return 0;
+}"></textarea>
+        </div>
+        <div class="editor-status muted">语言：C++（g++ -O2 -std=c++17）／C（gcc -O2 -std=c11）</div>
+
+        <div class="result-box" id="result-box" style="display:none;">
+          <div class="result-row">
+            <span>状态</span>
+            <span id="result-status"></span>
+          </div>
+          <div class="result-row">
+            <span>耗时</span>
+            <span id="result-time"></span>
+          </div>
+          <div class="result-row">
+            <span>内存</span>
+            <span id="result-memory"></span>
+          </div>
+          <div id="result-error" class="result-error" style="display:none;"></div>
+          <div style="margin-top:10px;">
+            <a href="#" id="result-link" style="display:none;">查看提交详情 →</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="/js/common.js"></script>
+  <script src="/js/problem.js"></script>
+</body>
+</html>

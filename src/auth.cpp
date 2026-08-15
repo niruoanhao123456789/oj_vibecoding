@@ -91,8 +91,8 @@ std::string validate_password(const std::string& password) {
 // ---------- 注册 ----------
 
 bool register_user(Database& db, const std::string& username,
-                   const std::string& password, std::string& err_code,
-                   std::string& err_msg) {
+                   const std::string& password, const std::string& role,
+                   std::string& err_code, std::string& err_msg) {
     auto dup = db.query("SELECT id FROM users WHERE username = ?", username);
     if (!dup) {
         err_code = kErrInternal;
@@ -105,10 +105,11 @@ bool register_user(Database& db, const std::string& username,
         return false;
     }
 
+    const std::string final_role = role.empty() ? "student" : role;
     auto st = db.prepare(
         "INSERT INTO users (username, password, role, status) "
-        "VALUES (?, ?, 'student', 1)");
-    st->bind(username).bind(encode_password(password, make_salt()));
+        "VALUES (?, ?, ?, 1)");
+    st->bind(username).bind(encode_password(password, make_salt())).bind(final_role);
     if (!st->execute()) {
         // 并发下唯一索引兜底
         if (st->error().find("Duplicate") != std::string::npos ||
@@ -233,6 +234,18 @@ bool require_staff(Database& db, const httplib::Request& req,
     }
     if (user.role != "teacher" && user.role != "admin") {
         send_error(res, 403, kErrForbidden, "需要教师或管理员权限");
+        return false;
+    }
+    return true;
+}
+
+bool require_admin(Database& db, const httplib::Request& req,
+                   httplib::Response& res, SessionUser& user) {
+    if (!require_auth(db, req, res, user)) {
+        return false;
+    }
+    if (user.role != "admin") {
+        send_error(res, 403, kErrForbidden, "需要管理员权限");
         return false;
     }
     return true;
