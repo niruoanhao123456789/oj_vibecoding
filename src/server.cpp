@@ -8,6 +8,7 @@
 
 #include "auth.h"
 #include "admin/admin_problem.h"
+#include "admin/admin_stats.h"
 #include "admin/admin_user.h"
 #include "judge/worker.h"
 #include "log.h"
@@ -675,6 +676,167 @@ bool Server::start() {
                          send_error(res, 400, kErrParamInvalid, e.what());
                      }
                  });
+
+    // ---- 判题限制与测试用例维护（阶段 8）----
+
+    // PUT /api/admin/problems/:id/limits：修改判题限制（时间/内存上限）
+    svr_->Put(R"(/api/admin/problems/(\d+)/limits)",
+              [&](const httplib::Request& req, httplib::Response& res) {
+                  SessionUser user;
+                  if (!require_staff(db_, req, res, user)) {
+                      return;
+                  }
+                  const unsigned long long id = std::strtoull(
+                      req.matches[1].str().c_str(), nullptr, 10);
+                  if (req.body.empty()) {
+                      send_error(res, 400, kErrParamInvalid,
+                                 "请求体必须是 JSON");
+                      return;
+                  }
+                  Json::Value root;
+                  Json::CharReaderBuilder builder;
+                  std::string errs;
+                  std::istringstream in(req.body);
+                  if (!Json::parseFromStream(builder, in, &root, &errs)) {
+                      send_error(res, 400, kErrParamInvalid, "JSON 解析失败");
+                      return;
+                  }
+                  try {
+                      Json::Value data;
+                      update_problem_limits(db_, id, root, user.role, user.id,
+                                            data);
+                      LOG_INFO("problem limits updated: id=%llu by %s", id,
+                               user.username.c_str());
+                      send_ok(res, data);
+                  } catch (const std::exception& e) {
+                      send_error(res, 400, kErrParamInvalid, e.what());
+                  }
+              });
+
+    // GET /api/admin/problems/:id/testcases：列出隐藏测试点
+    svr_->Get(R"(/api/admin/problems/(\d+)/testcases)",
+              [&](const httplib::Request& req, httplib::Response& res) {
+                  SessionUser user;
+                  if (!require_staff(db_, req, res, user)) {
+                      return;
+                  }
+                  const unsigned long long id = std::strtoull(
+                      req.matches[1].str().c_str(), nullptr, 10);
+                  try {
+                      Json::Value data;
+                      list_test_cases(db_, id, user.role, user.id, data);
+                      send_ok(res, data);
+                  } catch (const std::exception& e) {
+                      send_error(res, 400, kErrParamInvalid, e.what());
+                  }
+              });
+
+    // POST /api/admin/problems/:id/testcases：追加一个测试点
+    svr_->Post(R"(/api/admin/problems/(\d+)/testcases)",
+               [&](const httplib::Request& req, httplib::Response& res) {
+                   SessionUser user;
+                   if (!require_staff(db_, req, res, user)) {
+                       return;
+                   }
+                   const unsigned long long id = std::strtoull(
+                       req.matches[1].str().c_str(), nullptr, 10);
+                   if (req.body.empty()) {
+                       send_error(res, 400, kErrParamInvalid,
+                                  "请求体必须是 JSON");
+                       return;
+                   }
+                   Json::Value root;
+                   Json::CharReaderBuilder builder;
+                   std::string errs;
+                   std::istringstream in(req.body);
+                   if (!Json::parseFromStream(builder, in, &root, &errs)) {
+                       send_error(res, 400, kErrParamInvalid, "JSON 解析失败");
+                       return;
+                   }
+                   try {
+                       Json::Value data;
+                       add_test_case(db_, id, root, user.role, user.id, data);
+                       LOG_INFO("test case added: problem=%llu by %s", id,
+                                user.username.c_str());
+                       send_ok(res, data);
+                   } catch (const std::exception& e) {
+                       send_error(res, 400, kErrParamInvalid, e.what());
+                   }
+               });
+
+    // DELETE /api/admin/problems/:id/testcases/:num：删除一个测试点
+    svr_->Delete(R"(/api/admin/problems/(\d+)/testcases/(\d+))",
+                 [&](const httplib::Request& req, httplib::Response& res) {
+                     SessionUser user;
+                     if (!require_staff(db_, req, res, user)) {
+                         return;
+                     }
+                     const unsigned long long id = std::strtoull(
+                         req.matches[1].str().c_str(), nullptr, 10);
+                     const int num = static_cast<int>(std::strtol(
+                         req.matches[2].str().c_str(), nullptr, 10));
+                     try {
+                         delete_test_case(db_, id, num, user.role, user.id);
+                         LOG_INFO("test case deleted: problem=%llu num=%d by %s",
+                                  id, num, user.username.c_str());
+                         send_ok(res, Json::Value(Json::objectValue));
+                     } catch (const std::exception& e) {
+                         send_error(res, 400, kErrParamInvalid, e.what());
+                     }
+                 });
+
+    // ---- 统计与 CSV 导出（阶段 8）----
+
+    // GET /api/admin/stats：教师本班 / 管理员全部统计
+    svr_->Get("/api/admin/stats", [&](const httplib::Request& req,
+                                      httplib::Response& res) {
+        SessionUser user;
+        if (!require_staff(db_, req, res, user)) {
+            return;
+        }
+        Json::Value data;
+        if (!query_admin_stats(db_, user.role, user.id, data)) {
+            send_error(res, 500, kErrInternal, "统计查询失败");
+            return;
+        }
+        send_ok(res, data);
+    });
+
+    // GET /api/admin/submissions/export.csv：提交记录 CSV 导出
+    svr_->Get("/api/admin/submissions/export.csv",
+              [&](const httplib::Request& req, httplib::Response& res) {
+                  SessionUser user;
+                  if (!require_staff(db_, req, res, user)) {
+                      return;
+                  }
+                  const std::string pid_str = req.get_param_value("problem_id");
+                  const std::string uid_str = req.get_param_value("user_id");
+                  const unsigned int problem_id = pid_str.empty()
+                                                      ? 0
+                                                      : static_cast<unsigned int>(
+                                                            std::strtoul(
+                                                                pid_str.c_str(),
+                                                                nullptr, 10));
+                  const unsigned int user_id = uid_str.empty()
+                                                   ? 0
+                                                   : static_cast<unsigned int>(
+                                                         std::strtoul(
+                                                             uid_str.c_str(),
+                                                             nullptr, 10));
+                  std::string csv;
+                  if (!export_submissions_csv(db_, user.role, user.id,
+                                              problem_id, user_id, csv)) {
+                      send_error(res, 500, kErrInternal, "CSV 导出失败");
+                      return;
+                  }
+                  LOG_INFO("submissions exported: by=%s problem=%u user=%u",
+                           user.username.c_str(), problem_id, user_id);
+                  res.set_header("Content-Type", "text/csv; charset=utf-8");
+                  res.set_header(
+                      "Content-Disposition",
+                      "attachment; filename=\"submissions.csv\"");
+                  res.set_content(csv, "text/csv; charset=utf-8");
+              });
 
     LOG_INFO("listening on %s:%d", cfg_.host.c_str(), cfg_.port);
     svr_->listen(cfg_.host, cfg_.port);

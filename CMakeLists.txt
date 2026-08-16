@@ -29,6 +29,7 @@ add_executable(oj_server
   src/ojclass.cpp
   src/submission.cpp
   src/admin/admin_problem.cpp
+  src/admin/admin_stats.cpp
   src/admin/admin_user.cpp
   src/judge/compiler.cpp
   src/judge/compare.cpp

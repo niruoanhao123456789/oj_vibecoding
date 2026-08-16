@@ -254,7 +254,7 @@ oj_vibecoding/
 │   │   └── worker.h / worker.cpp      # worker 池（2-4 线程）
 │   └── admin/
 │       ├── admin_problem.h / .cpp     # 教师/管理员题目导入/修改/删除
-│       ├── admin_stats.h / .cpp       # 统计与 CSV 导出（阶段 8 规划）
+│       ├── admin_stats.h / .cpp       # 统计与 CSV 导出
 │       └── admin_user.h / .cpp        # 管理员用户管理 + 系统配置读写
 ├── tools/
 │   └── oj_import.cpp              # 命令行题目导入工具（阶段 2 验证用）
@@ -420,11 +420,11 @@ oj_vibecoding/
 - [x] 教师班级管理：创建班级、生成/重置邀请码、查看成员（`GET/POST /api/admin/class`、`POST /api/admin/class/invite`）
 - [x] 学生加入班级：`POST /api/class/join`（凭邀请码）；题目可见性按 4.9 规则过滤
 - [x] 教师题目管理页：JSON 导入表单、题目列表（编辑/删除，仅限本人发布的题）
-- [ ] 教师统计页 + CSV 导出（`GET /api/admin/submissions/export.csv`）
+- [x] 教师统计页 + CSV 导出（`GET /api/admin/stats`、`GET /api/admin/submissions/export.csv`）
 - [x] `POST /api/admin/problems/import`（教师导入本班题、管理员导入全局题）、`PUT/DELETE /api/admin/problems/:id`
 - [x] 管理员用户管理页：用户列表/新增/禁用/删除/角色调整 + 保护规则 + 有班级教师的删除/降级二次确认与班级联动删除
 - [x] 注册教师邀请码：`GET/PUT /api/admin/config`（教师注册邀请码管理），注册时填写即成为教师
-- [ ] 管理员配置页：判题限制（时间/内存上限）、测试用例维护
+- [x] 管理员配置页：判题限制（时间/内存上限）、测试用例维护（`PUT /api/admin/problems/:id/limits`、测试用例增删查接口）
 - [x] 验证：教师建班→学生凭邀请码入班→学生可见该师题目；未入班学生列表为空；学生访问管理接口返回 403
 
 ### 阶段 9：日志 + 测试

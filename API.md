@@ -434,11 +434,102 @@ PENDING → COMPILING → COMPILE_ERROR / COMPILE_TIMEOUT / RUNNING
 - **响应** `200`：`{ "ok": true, "data": {} }`。
 - **错误**：`400 PARAM_INVALID`（无权限/题目不存在）、`401/403`。
 
-## 12. 未实现接口（SPEC 规划中）
+### 11.4 `PUT /api/admin/problems/:id/limits` — 修改判题限制
+
+- **作用**：直接修改单题的判题限制（CPU 时限 / 内存上限），不影响测试用例。
+- **鉴权**：需 `teacher` / `admin`。教师仅能改本人发布的题；管理员可改任意题。
+- **请求体**（至少提供一个字段，均须为正整数）：
+  ```json
+  { "time_limit_ms": 2000, "memory_limit_mb": 512 }
+  ```
+- **响应** `200`：
+  ```json
+  { "ok": true, "data": { "problem": { "id": 5, "time_limit_ms": 2000, "memory_limit_mb": 512 } } }
+  ```
+- **错误**：`400 PARAM_INVALID`（无权限/参数非法/题目不存在）、`401/403`。
+
+### 11.5 `GET /api/admin/problems/:id/testcases` — 列出隐藏测试点
+
+- **作用**：返回指定题目的全部隐藏测试点（编号、输入/输出预览、分值）。
+- **鉴权**：需 `teacher` / `admin`。教师仅能查看本人发布的题；管理员任意题。
+- **响应** `200`：
+  ```json
+  {
+    "ok": true,
+    "data": {
+      "testcases": [
+        { "num": 1, "input": "1 2\n", "output": "3\n", "score": 50 }
+      ]
+    }
+  }
+  ```
+  - `input`/`output` 为预览（超 4096 字节截断并附 `...(truncated)`）；`score` 无分值时 `null`。
+- **错误**：`400 PARAM_INVALID`（无权限/题目不存在）、`401/403`。
+
+### 11.6 `POST /api/admin/problems/:id/testcases` — 追加测试点
+
+- **作用**：为题目追加一个隐藏测试点（写入 `<下一个编号>.in` / `.out`），同步维护 `score` 文件。
+- **鉴权**：需 `teacher` / `admin`。教师仅能改本人发布的题；管理员任意题。
+- **请求体**：
+  ```json
+  { "input": "1 2\n", "output": "3\n", "score": 50 }
+  ```
+  `input`/`output` 必填字符串（各 ≤4MB），`score` 可选整数。
+- **响应** `200`：
+  ```json
+  { "ok": true, "data": { "testcase": { "num": 4, "input": "1 2\n", "output": "3\n", "score": 50 } } }
+  ```
+- **错误**：`400 PARAM_INVALID`、`401/403`。
+
+### 11.7 `DELETE /api/admin/problems/:id/testcases/:num` — 删除测试点
+
+- **作用**：删除编号为 `num` 的测试点，后续编号前移保持连续；同步更新 `score` 文件。
+- **路径参数**：`num` 测试点编号（正整数）。
+- **鉴权**：需 `teacher` / `admin`。教师仅能改本人发布的题；管理员任意题。
+- **响应** `200`：`{ "ok": true, "data": {} }`。
+- **错误**：`400 PARAM_INVALID`（无权限/测试点不存在）、`401/403`。
+
+## 12. 统计与导出（教师/管理员）
+
+### 12.1 `GET /api/admin/stats` — 统计
+
+- **作用**：返回各题提交数/AC 率与各学生提交情况。
+  - 教师：仅统计自己发布的题目（本班题），及本班学生的提交情况（只统计本班题目的提交）；
+  - 管理员：统计全部题目与全部有提交记录的学生。
+- **鉴权**：需 `teacher` / `admin` 角色。
+- **响应** `200`：
+  ```json
+  {
+    "ok": true,
+    "data": {
+      "total_submit": 42,
+      "total_ac": 10,
+      "total_rate": 24,
+      "problem_stats": [
+        { "problem_id": 1, "title": "A+B Problem", "submit_count": 20, "ac_count": 5, "pass_rate": 25 }
+      ],
+      "student_stats": [
+        { "user_id": 2, "username": "bob", "submit_count": 8, "ac_count": 2, "pass_rate": 25 }
+      ]
+    }
+  }
+  ```
+- **错误**：`401 NOT_AUTHENTICATED`、`403 FORBIDDEN`、`500 INTERNAL_ERROR`。
+
+### 12.2 `GET /api/admin/submissions/export.csv` — 提交记录 CSV 导出
+
+- **作用**：导出提交记录为 CSV（UTF-8 带 BOM、CRLF 行尾，Excel 可直接打开）。
+  教师仅能导出自己发布题目的提交；管理员可导出全部。
+- **鉴权**：需 `teacher` / `admin` 角色。
+- **查询参数**（均可选）：`problem_id` 按题目过滤；`user_id` 按用户过滤。
+- **响应** `200`：`text/csv`，带 `Content-Disposition: attachment`。列：
+  `id,username,problem_id,problem_title,language,status,exec_time_ms,memory_kb,created_at`
+- **错误**：`401 NOT_AUTHENTICATED`、`403 FORBIDDEN`、`500 INTERNAL_ERROR`。
+
+## 13. 未实现接口（SPEC 规划中）
 
 以下路由在 `SPEC.md` 第 5 节中规划，但当前代码（`src/server.cpp`）尚未注册，**不可调用**：
 
-- `GET /api/admin/stats` — 教师统计
-- `GET /api/admin/submissions/export.csv` — 提交记录 CSV 导出
+- （阶段 8 全部接口已实现，当前无未实现路由）
 
 前端已实现的页面可参考 `frontend/pages/` 下的 HTML 与 `frontend/js/` 中的调用方式。

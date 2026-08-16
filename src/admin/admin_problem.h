@@ -37,4 +37,30 @@ void delete_problem_json(Database& db, unsigned long long id,
                          const std::string& actor_role,
                          unsigned int actor_id);
 
+// ---- 判题限制与测试用例维护（阶段 8）----
+// 权限与题目 CRUD 一致：教师仅本人题，管理员任意题。失败抛 std::runtime_error。
+
+// 更新题目判题限制（time_limit_ms / memory_limit_mb，至少提供一项，均须正整数）。
+// 成功填充 out["problem"]（含最新限制）。
+void update_problem_limits(Database& db, unsigned long long id,
+                           const Json::Value& root,
+                           const std::string& actor_role,
+                           unsigned int actor_id, Json::Value& out);
+
+// 列出题目的隐藏测试点（编号/输入输出预览/分值）。
+// 成功填充 out["testcases"] 数组。
+void list_test_cases(Database& db, unsigned long long id,
+                     const std::string& actor_role, unsigned int actor_id,
+                     Json::Value& out);
+
+// 追加一个测试点（input/output 必填字符串，score 可选整数）。
+// 成功填充 out["testcase"]（含新编号）。
+void add_test_case(Database& db, unsigned long long id, const Json::Value& root,
+                   const std::string& actor_role, unsigned int actor_id,
+                   Json::Value& out);
+
+// 删除编号为 num 的测试点，并把后续编号前移保持连续；同步维护 score 文件。
+void delete_test_case(Database& db, unsigned long long id, int num,
+                      const std::string& actor_role, unsigned int actor_id);
+
 } // namespace oj

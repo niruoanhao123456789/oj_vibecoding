@@ -68,6 +68,83 @@
         </form>
       </div>
 
+      <!-- 教师/管理员：统计与 CSV 导出 -->
+      <div class="panel" id="stats-panel" style="display:none;">
+        <h2>统计</h2>
+        <p class="muted">教师统计本班题目与班级学生提交情况；管理员统计全部。</p>
+        <div class="stat-grid">
+          <div class="stat-card">
+            <div class="stat-num" id="st-total">0</div>
+            <div class="stat-label">提交总数</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="st-ac">0</div>
+            <div class="stat-label">AC 数</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-num" id="st-rate">0%</div>
+            <div class="stat-label">通过率（AC/提交）</div>
+          </div>
+        </div>
+
+        <h3>各题提交统计</h3>
+        <table class="table">
+          <thead>
+            <tr><th>题目</th><th>提交数</th><th>AC 数</th><th>通过率</th></tr>
+          </thead>
+          <tbody id="stats-problem-body"></tbody>
+        </table>
+        <p id="stats-problem-empty" class="empty-hint muted" style="display:none;">暂无题目数据。</p>
+
+        <h3>学生提交情况</h3>
+        <table class="table">
+          <thead>
+            <tr><th>学生</th><th>提交数</th><th>AC 数</th><th>通过率</th></tr>
+          </thead>
+          <tbody id="stats-student-body"></tbody>
+        </table>
+        <p id="stats-student-empty" class="empty-hint muted" style="display:none;">暂无学生数据。</p>
+
+        <h3>提交记录导出（CSV）</h3>
+        <p class="muted">按题目 / 学生过滤后导出为 CSV（教师仅能导出本班题目提交）。</p>
+        <div class="join-row">
+          <select id="export-problem"><option value="">全部题目</option></select>
+          <select id="export-user"><option value="">全部学生</option></select>
+          <button type="button" id="export-btn" class="btn">导出 CSV</button>
+        </div>
+      </div>
+
+      <!-- 教师/管理员：判题配置（限制与测试用例维护） -->
+      <div class="panel" id="judge-panel" style="display:none;">
+        <h2>判题配置</h2>
+        <p class="muted">教师仅能配置本人发布的题目；管理员可配置任意题目。</p>
+        <div class="join-row">
+          <select id="judge-problem" style="flex:1;"><option value="">选择题目…</option></select>
+        </div>
+
+        <h3>判题限制</h3>
+        <div class="join-row">
+          <input type="number" id="limit-time" min="1" placeholder="CPU 时限 (ms)">
+          <input type="number" id="limit-mem" min="1" placeholder="内存上限 (MB)">
+          <button type="button" id="limit-save" class="btn">保存限制</button>
+        </div>
+
+        <h3>测试用例</h3>
+        <div id="testcase-list"></div>
+        <div class="form-group" style="margin-top:12px;">
+          <label for="tc-input">输入</label>
+          <textarea id="tc-input" rows="3" style="width:100%;font-family:monospace;font-size:13px;"></textarea>
+        </div>
+        <div class="form-group">
+          <label for="tc-output">期望输出</label>
+          <textarea id="tc-output" rows="3" style="width:100%;font-family:monospace;font-size:13px;"></textarea>
+        </div>
+        <div class="join-row" style="margin-top:8px;">
+          <input type="number" id="tc-score" placeholder="分值（可选）">
+          <button type="button" id="tc-add" class="btn">添加测试点</button>
+        </div>
+      </div>
+
       <!-- 教师/管理员：题目管理 -->
       <div class="panel" id="problem-panel">
         <h2>题目管理</h2>
