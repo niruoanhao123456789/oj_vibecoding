@@ -1,0 +1,10 @@
+{
+  "title": "素数判断",
+  "description": "判断一个正整数是否为素数。\n\n输入格式：一个整数 n（1 ≤ n ≤ 10^9）。\n输出格式：若为素数输出 yes，否则输出 no。",
+  "sample_in": "7\n",
+  "sample_out": "yes\n",
+  "time_limit_ms": 1000,
+  "memory_limit_mb": 256,
+  "difficulty": 3,
+  "test_dir": "tests"
+}

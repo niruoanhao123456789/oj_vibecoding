@@ -1,0 +1,14 @@
+{
+  "title": "三数最大值",
+  "description": "读入三个整数 a、b、c，输出其中的最大值。\n\n输入格式：一行三个整数 a b c（|a|, |b|, |c| ≤ 10^9）。\n输出格式：一个整数，表示最大值。",
+  "sample_in": "1 5 3\n",
+  "sample_out": "5\n",
+  "time_limit_ms": 1000,
+  "memory_limit_mb": 256,
+  "difficulty": 2,
+  "test_cases": [
+    { "input": "1 5 3\n", "output": "5\n" },
+    { "input": "9 9 9\n", "output": "9\n" },
+    { "input": "-3 -1 -2\n", "output": "-1\n" }
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "title": "无限循环探针",
+  "description": "判题限制验证题：读入一个整数并原样输出。\n\n【测试说明】本题目时限极短（100ms），若提交的代码存在死循环或长时间运算将得到 TLE（超时）结果，用于验证判题系统的超时判定。正确代码（直接输出）仍可 AC。",
+  "sample_in": "1\n",
+  "sample_out": "1\n",
+  "time_limit_ms": 100,
+  "memory_limit_mb": 256,
+  "difficulty": 1,
+  "test_cases": [
+    { "input": "1\n", "output": "1\n" }
+  ]
+}

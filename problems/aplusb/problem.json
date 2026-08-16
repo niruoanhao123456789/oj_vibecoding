@@ -5,5 +5,6 @@
   "sample_out": "3\n",
   "time_limit_ms": 1000,
   "memory_limit_mb": 256,
+  "difficulty": 1,
   "test_dir": "tests"
 }

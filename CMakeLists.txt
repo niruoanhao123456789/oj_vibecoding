@@ -76,6 +76,26 @@ target_link_libraries(oj_import PRIVATE
 )
 install(TARGETS oj_import RUNTIME DESTINATION bin)
 
+# 测试环境数据库重置与测试数据构造工具（WebAutoTest 前置准备）
+add_executable(oj_db_reset
+  tools/oj_db_reset.cpp
+  src/problem.cpp
+  src/config.cpp
+  src/db.cpp
+  src/hash.cpp
+  src/log.cpp
+)
+target_include_directories(oj_db_reset PRIVATE
+  ${CMAKE_CURRENT_SOURCE_DIR}/src
+  /usr/include/jsoncpp
+)
+target_link_libraries(oj_db_reset PRIVATE
+  ${MYSQL_CLIENT_LIB}
+  jsoncpp
+  Threads::Threads
+)
+install(TARGETS oj_db_reset RUNTIME DESTINATION bin)
+
 include(CTest)
 
 if(BUILD_TESTING)

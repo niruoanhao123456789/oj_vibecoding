@@ -1,0 +1,10 @@
+{
+  "title": "字符串反转",
+  "description": "读入一行不含空格的字符串 s，输出其反转后的字符串。\n\n输入格式：一行字符串 s（长度 1-100，仅含小写字母）。\n输出格式：反转后的字符串。",
+  "sample_in": "hello\n",
+  "sample_out": "olleh\n",
+  "time_limit_ms": 1000,
+  "memory_limit_mb": 256,
+  "difficulty": 2,
+  "test_dir": "tests"
+}

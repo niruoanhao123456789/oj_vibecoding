@@ -1,0 +1,12 @@
+{
+  "title": "内存上限探针",
+  "description": "判题限制验证题：读入一个整数并原样输出。\n\n【测试说明】本题目内存上限极小（16MB），若提交的代码一次性分配大量内存（如 new 上百 MB 数组）将得到 MLE（超内存）结果，用于验证判题系统的内存判定。正确代码（不大量分配内存）仍可 AC。",
+  "sample_in": "1\n",
+  "sample_out": "1\n",
+  "time_limit_ms": 1000,
+  "memory_limit_mb": 16,
+  "difficulty": 2,
+  "test_cases": [
+    { "input": "1\n", "output": "1\n" }
+  ]
+}
