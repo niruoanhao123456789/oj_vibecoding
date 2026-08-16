@@ -1,0 +1,614 @@
+/* landing.css — 首页落地页：天蓝 × 人文风
+   仅作用于 index.html 的 .landing 结构与装饰云 */
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* ── 装饰云影（延续 auth 页风格） ─────────────────────── */
+.landing-cloud {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(60px);
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.landing-cloud-1 {
+  width: 420px;
+  height: 420px;
+  top: 2%;
+  left: -160px;
+  background: radial-gradient(circle, rgba(125, 211, 252, 0.5), rgba(125, 211, 252, 0) 70%);
+  animation: cloud-drift 26s ease-in-out infinite alternate;
+}
+
+.landing-cloud-2 {
+  width: 360px;
+  height: 360px;
+  top: 46%;
+  right: -140px;
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.28), rgba(251, 191, 36, 0) 70%);
+  animation: cloud-drift 34s ease-in-out infinite alternate-reverse;
+}
+
+.landing-cloud-3 {
+  width: 300px;
+  height: 300px;
+  bottom: -80px;
+  left: 38%;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.24), rgba(56, 189, 248, 0) 70%);
+  animation: cloud-drift 40s ease-in-out infinite alternate;
+}
+
+@keyframes cloud-drift {
+  from { transform: translateY(0); }
+  to   { transform: translateY(28px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-cloud { animation: none; }
+  html { scroll-behavior: auto; }
+}
+
+/* 主内容置于装饰之上 */
+.landing {
+  position: relative;
+  z-index: 1;
+}
+
+/* ── Hero ─────────────────────────────────────────────── */
+.landing-hero {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 72px 24px 40px;
+  display: grid;
+  grid-template-columns: 1.05fr 0.95fr;
+  gap: 48px;
+  align-items: center;
+}
+
+.hero-eyebrow {
+  display: inline-block;
+  margin: 0 0 18px;
+  padding: 5px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  color: #0284c7;
+  background: rgba(224, 244, 255, 0.8);
+  border: 1px solid rgba(125, 211, 252, 0.6);
+  border-radius: 999px;
+}
+
+.hero-text h1 {
+  margin: 0;
+  font-family: Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif;
+  font-size: clamp(40px, 5.2vw, 62px);
+  line-height: 1.22;
+  letter-spacing: 2px;
+  color: #0c4a6e;
+}
+
+.hero-sub {
+  margin: 22px 0 0;
+  max-width: 540px;
+  font-size: 17px;
+  line-height: 1.8;
+  color: #155e8c;
+}
+
+.hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-top: 30px;
+}
+
+.btn-lg {
+  padding: 13px 28px;
+  font-size: 16px;
+  border-radius: 10px;
+}
+
+.btn-ghost {
+  background: #ffffff;
+  color: #0284c7;
+  border: 1.5px solid rgba(14, 165, 233, 0.45);
+  box-shadow: none;
+}
+
+.btn-ghost:hover {
+  background: #f0f8ff;
+  transform: translateY(-1px);
+  box-shadow: 0 10px 18px -10px rgba(14, 165, 233, 0.4);
+}
+
+.hero-points {
+  list-style: none;
+  margin: 30px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+}
+
+.hero-points li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 14px;
+  color: #0e7490;
+}
+
+.hero-points svg {
+  width: 18px;
+  height: 18px;
+  color: #16a34a;
+}
+
+/* ── 代码窗口 mock ────────────────────────────────────── */
+.hero-visual {
+  position: relative;
+}
+
+.code-mock {
+  border-radius: 14px;
+  overflow: hidden;
+  background: #282c34;
+  box-shadow: 0 30px 60px -24px rgba(12, 74, 110, 0.45);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+}
+
+.code-mock-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #21252b;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.code-mock-head .dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.dot-r { background: #ff5f57; }
+.dot-y { background: #febc2e; }
+.dot-g { background: #28c840; }
+
+.code-mock-file {
+  margin-left: 8px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 13px;
+  color: #abb2bf;
+}
+
+.code-mock-lang {
+  margin-left: auto;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  color: #6a737d;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  padding: 2px 8px;
+  border-radius: 6px;
+}
+
+.code-mock-body {
+  padding: 14px 0 10px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 14px;
+  line-height: 1.7;
+}
+
+.code-line {
+  display: flex;
+  padding: 0 16px;
+  white-space: pre;
+}
+
+.code-line .ln {
+  width: 30px;
+  flex: none;
+  text-align: right;
+  margin-right: 16px;
+  color: #5c6370;
+  user-select: none;
+}
+
+.tok-kw  { color: #c678dd; }
+.tok-fn  { color: #61afef; }
+.tok-com { color: #7f848e; font-style: italic; }
+
+.code-mock-foot {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: #1c2026;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12.5px;
+}
+
+.code-mock-verdict {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #28c840;
+  font-weight: 700;
+}
+
+.code-mock-verdict svg {
+  width: 15px;
+  height: 15px;
+}
+
+.code-mock-meta {
+  margin-left: auto;
+  color: #7f848e;
+}
+
+.code-mock-meta + .code-mock-meta {
+  margin-left: 0;
+}
+
+.hero-caption {
+  margin: 18px 0 0;
+  text-align: center;
+  font-size: 13px;
+  color: #64748b;
+  letter-spacing: 1px;
+}
+
+/* ── 实时数据条 ───────────────────────────────────────── */
+.landing-stats {
+  max-width: 1180px;
+  margin: 8px auto 0;
+  padding: 26px 32px;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  background: rgba(255, 255, 255, 0.7);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(186, 230, 253, 0.9);
+  border-radius: 16px;
+  box-shadow: 0 18px 40px -20px rgba(12, 74, 110, 0.22);
+}
+
+.stat-item {
+  text-align: center;
+}
+
+.stat-num {
+  display: block;
+  font-family: Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif;
+  font-size: 30px;
+  font-weight: 700;
+  color: #0ea5e9;
+}
+
+.stat-label {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+/* ── 通用区块 ─────────────────────────────────────────── */
+.landing-section {
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 88px 24px 0;
+}
+
+.section-head {
+  text-align: center;
+  margin-bottom: 48px;
+}
+
+.section-head h2 {
+  margin: 0;
+  font-family: Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif;
+  font-size: clamp(28px, 3.4vw, 40px);
+  letter-spacing: 1.5px;
+  color: #0c4a6e;
+}
+
+.section-head p {
+  margin: 12px 0 0;
+  font-size: 15px;
+  color: #64748b;
+}
+
+/* ── 特性卡片 ─────────────────────────────────────────── */
+.feature-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+}
+
+.feature-card {
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(186, 230, 253, 0.9);
+  border-radius: 16px;
+  padding: 28px 26px;
+  box-shadow: 0 16px 36px -22px rgba(12, 74, 110, 0.28);
+  transition: transform 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 24px 44px -22px rgba(14, 165, 233, 0.4);
+  border-color: rgba(125, 211, 252, 0.9);
+}
+
+.feature-icon {
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 13px;
+  color: #ffffff;
+  background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+  box-shadow: 0 10px 20px -8px rgba(14, 165, 233, 0.5);
+}
+
+.feature-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.feature-card h3 {
+  margin: 18px 0 8px;
+  font-size: 18px;
+  color: #0c4a6e;
+}
+
+.feature-card p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.75;
+  color: #475569;
+}
+
+/* ── 判题流程 ─────────────────────────────────────────── */
+.judge-flow {
+  display: flex;
+  align-items: stretch;
+  gap: 14px;
+}
+
+.judge-step {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.86);
+  border: 1px solid rgba(186, 230, 253, 0.9);
+  border-radius: 16px;
+  padding: 28px 20px;
+  text-align: center;
+  box-shadow: 0 16px 36px -22px rgba(12, 74, 110, 0.28);
+}
+
+.step-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 13px;
+  color: #0284c7;
+  background: #e8f6ff;
+  border: 1px solid #bcdcf5;
+}
+
+.step-icon svg {
+  width: 24px;
+  height: 24px;
+}
+
+.judge-step h3 {
+  margin: 16px 0 6px;
+  font-size: 17px;
+  color: #0c4a6e;
+}
+
+.judge-step p {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: #64748b;
+}
+
+.step-tag {
+  display: inline-block;
+  padding: 3px 12px;
+  border-radius: 999px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 11.5px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: #b8860b;
+  background: #fff8e1;
+  border: 1px solid #f0e0a0;
+}
+
+.step-tag.tag-ac {
+  color: #16a34a;
+  background: #eafaf1;
+  border-color: #c3e6d2;
+}
+
+.judge-arrow {
+  display: flex;
+  align-items: center;
+  flex: none;
+  color: #7dd3fc;
+}
+
+.judge-arrow svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* ── 快速上手 ─────────────────────────────────────────── */
+.workflow-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+}
+
+.workflow-step {
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(186, 230, 253, 0.9);
+  border-radius: 16px;
+  padding: 28px 26px;
+  position: relative;
+}
+
+.workflow-num {
+  font-family: Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif;
+  font-size: 40px;
+  font-weight: 700;
+  color: rgba(14, 165, 233, 0.22);
+  line-height: 1;
+}
+
+.workflow-step h3 {
+  margin: 10px 0 8px;
+  font-size: 18px;
+  color: #0c4a6e;
+}
+
+.workflow-step p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.75;
+  color: #475569;
+}
+
+/* ── CTA 区块 ─────────────────────────────────────────── */
+.landing-cta {
+  max-width: 1180px;
+  margin: 88px auto 0;
+  padding: 64px 32px;
+  text-align: center;
+  background:
+    radial-gradient(720px 320px at 50% 0%, rgba(56, 189, 248, 0.28), transparent 65%),
+    linear-gradient(135deg, #e0f4ff, #fdf7ee);
+  border: 1px solid rgba(186, 230, 253, 0.9);
+  border-radius: 22px;
+  box-shadow: 0 24px 50px -28px rgba(12, 74, 110, 0.35);
+}
+
+.landing-cta h2 {
+  margin: 0;
+  font-family: Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif;
+  font-size: clamp(26px, 3vw, 36px);
+  letter-spacing: 1.5px;
+  color: #0c4a6e;
+}
+
+.landing-cta p {
+  margin: 14px auto 0;
+  max-width: 520px;
+  font-size: 15px;
+  line-height: 1.8;
+  color: #155e8c;
+}
+
+.landing-cta .hero-cta {
+  justify-content: center;
+}
+
+/* ── 页脚 ─────────────────────────────────────────────── */
+.landing-footer {
+  margin-top: 88px;
+  padding: 36px 24px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 18px;
+  border-top: 1px solid rgba(186, 230, 253, 0.9);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.footer-brand {
+  font-family: Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif;
+  font-weight: 700;
+  color: #0c4a6e;
+  letter-spacing: 0.5px;
+}
+
+.footer-text {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.footer-links {
+  display: flex;
+  gap: 14px;
+}
+
+.footer-links a {
+  font-size: 13px;
+  color: #0284c7;
+}
+
+.footer-links a:hover {
+  text-decoration: underline;
+}
+
+/* ── 响应式 ───────────────────────────────────────────── */
+@media (max-width: 960px) {
+  .landing-hero {
+    grid-template-columns: 1fr;
+    gap: 40px;
+    padding-top: 48px;
+    text-align: center;
+  }
+
+  .hero-sub {
+    margin-left: auto;
+    margin-right: auto;
+  }
+
+  .hero-cta,
+  .hero-points {
+    justify-content: center;
+  }
+
+  .feature-grid,
+  .workflow-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .judge-flow {
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .judge-arrow svg {
+    transform: rotate(90deg);
+  }
+
+  .judge-step {
+    width: 100%;
+    max-width: 420px;
+  }
+}
+
+@media (max-width: 640px) {
+  .feature-grid,
+  .workflow-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .landing-stats {
+    grid-template-columns: 1fr 1fr;
+  }
+}
