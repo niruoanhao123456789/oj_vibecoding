@@ -1,15 +1,15 @@
-/* style.css — 全局样式（阶段 3：公共导航/表单/提示） */
+/* style.css — 全局样式（天蓝 × 人文风主题） */
 
 :root {
-  --primary: #4a6fa5;
-  --primary-dark: #3a5a86;
-  --danger: #c0392b;
-  --success: #27ae60;
-  --bg: #f5f6f8;
+  --primary: #0ea5e9;
+  --primary-dark: #0284c7;
+  --danger: #d6453d;
+  --success: #16a34a;
+  --bg: #eaf6ff;
   --card: #ffffff;
-  --border: #e1e5eb;
-  --text: #2c3e50;
-  --muted: #7f8c8d;
+  --border: #d8ecfb;
+  --text: #0c4a6e;
+  --muted: #64748b;
 }
 
 * {
@@ -19,9 +19,19 @@
 body {
   margin: 0;
   font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-  background: var(--bg);
+  background:
+    radial-gradient(1100px 520px at 88% -10%, rgba(56, 189, 248, 0.22), transparent 62%),
+    radial-gradient(820px 480px at 5% 110%, rgba(249, 115, 22, 0.07), transparent 60%),
+    linear-gradient(180deg, #e0f4ff 0%, #eef9ff 55%, #fdf7ee 100%);
+  background-attachment: fixed;
   color: var(--text);
   line-height: 1.6;
+}
+
+/* 人文风：标题使用宋体系衬线字体 */
+h1, h2, h3 {
+  font-family: Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif;
+  letter-spacing: 0.5px;
 }
 
 a {
@@ -35,14 +45,18 @@ a:hover {
 
 /* 顶部导航 */
 nav {
+  position: sticky;
+  top: 0;
+  z-index: 100;
   display: flex;
   align-items: center;
   justify-content: space-between;
-  background: var(--card);
-  border-bottom: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(8px);
+  border-bottom: 1px solid rgba(186, 230, 253, 0.9);
   padding: 0 24px;
-  height: 56px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  height: 60px;
+  box-shadow: 0 2px 12px -6px rgba(12, 74, 110, 0.12);
 }
 
 nav .brand {
@@ -50,6 +64,8 @@ nav .brand {
   font-weight: 700;
   color: var(--primary);
   text-decoration: none;
+  font-family: Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif;
+  letter-spacing: 0.5px;
 }
 
 nav .nav-links {
@@ -62,12 +78,13 @@ nav .nav-links a {
   color: var(--text);
   text-decoration: none;
   padding: 4px 8px;
-  border-radius: 4px;
+  border-radius: 6px;
+  transition: background-color 0.2s ease, color 0.2s ease;
 }
 
 nav .nav-links a:hover,
 nav .nav-links a.active {
-  background: #eef2f8;
+  background: rgba(14, 165, 233, 0.12);
   color: var(--primary);
 }
 
@@ -90,8 +107,9 @@ nav .nav-user {
 .card {
   background: var(--card);
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 24px;
+  box-shadow: 0 10px 28px -18px rgba(12, 74, 110, 0.25);
 }
 
 /* 认证页 */
@@ -122,28 +140,76 @@ nav .nav-user {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: 8px;
   font-size: 15px;
+  color: var(--text);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.form-group input:hover {
+  border-color: #9ccdf5;
 }
 
 .form-group input:focus {
   outline: none;
   border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
+}
+
+/* 通用表单控件：天蓝主题（排除代码编辑器） */
+.container input[type="text"],
+.container input[type="password"],
+.container input[type="number"],
+.container select,
+.container textarea:not(.editor-textarea) {
+  background: #f7fbff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.container input[type="text"]:hover,
+.container input[type="password"]:hover,
+.container input[type="number"]:hover,
+.container select:hover,
+.container textarea:not(.editor-textarea):hover {
+  border-color: #9ccdf5;
+}
+
+.container input[type="text"]:focus,
+.container input[type="password"]:focus,
+.container input[type="number"]:focus,
+.container select:focus,
+.container textarea:not(.editor-textarea):focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
+  background: #ffffff;
+}
+
+.container select {
+  padding: 8px 10px;
 }
 
 .btn {
   display: inline-block;
   padding: 10px 18px;
   border: none;
-  border-radius: 6px;
-  background: var(--primary);
+  border-radius: 8px;
+  background: linear-gradient(135deg, #38bdf8, var(--primary));
   color: #fff;
   font-size: 15px;
+  font-weight: 600;
   cursor: pointer;
+  box-shadow: 0 8px 16px -8px rgba(14, 165, 233, 0.55);
+  transition: filter 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .btn:hover {
-  background: var(--primary-dark);
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+  box-shadow: 0 12px 20px -8px rgba(14, 165, 233, 0.6);
 }
 
 .btn-block {
@@ -195,8 +261,10 @@ nav .nav-user {
 }
 
 .page-title {
-  font-size: 20px;
+  font-size: 22px;
+  font-weight: 600;
   margin: 0 0 16px;
+  color: #0c4a6e;
 }
 
 .muted {
@@ -207,10 +275,10 @@ nav .nav-user {
 /* 面板（班级管理 / 加入班级） */
 .panel {
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: 10px;
   padding: 16px;
   margin-bottom: 24px;
-  background: #fafbfc;
+  background: #f3fbff;
 }
 
 .panel h2 {
@@ -232,7 +300,7 @@ nav .nav-user {
   font-weight: 700;
   letter-spacing: 1px;
   color: var(--primary);
-  background: #eef2f8;
+  background: #e8f4ff;
   padding: 2px 8px;
   border-radius: 4px;
 }
@@ -260,11 +328,11 @@ nav .nav-user {
 .table th {
   color: var(--muted);
   font-weight: 600;
-  background: #fafbfc;
+  background: #f3fbff;
 }
 
 .table tr:hover {
-  background: #f7f9fc;
+  background: #f0f8ff;
 }
 
 /* 状态徽标 */
@@ -289,7 +357,7 @@ nav .nav-user {
 }
 
 .badge-na {
-  background: #eef2f8;
+  background: #f0f7ff;
   color: var(--muted);
   border: 1px solid var(--border);
 }
@@ -344,7 +412,7 @@ nav .nav-user {
 }
 
 .sample-block {
-  background: #fafbfc;
+  background: #f3fbff;
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 10px 12px;
@@ -510,7 +578,7 @@ nav .nav-user {
   border-radius: 12px;
   border: 1px solid var(--border);
   color: var(--muted);
-  background: #fafbfc;
+  background: #f3fbff;
 }
 
 .timeline-step.done {
@@ -580,7 +648,7 @@ nav .nav-user {
   border-radius: 8px;
   padding: 16px;
   text-align: center;
-  background: #fafbfc;
+  background: #f3fbff;
 }
 
 .stat-card .stat-num {

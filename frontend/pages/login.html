@@ -5,12 +5,23 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>登录 - OJ Vibecoding</title>
   <link rel="stylesheet" href="/css/style.css">
+  <link rel="stylesheet" href="/css/auth.css">
 </head>
-<body>
+<body class="auth-body">
+  <div class="auth-cloud auth-cloud-1" aria-hidden="true"></div>
+  <div class="auth-cloud auth-cloud-2" aria-hidden="true"></div>
   <nav id="main-nav"></nav>
   <div class="auth-page">
+    <div class="auth-head">
+      <div class="auth-logo" aria-hidden="true">
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+        </svg>
+      </div>
+      <h1 class="auth-title">欢迎回来</h1>
+      <p class="auth-sub">以代码为舟，渡求知之海</p>
+    </div>
     <div class="card auth-card">
-      <h1>登录</h1>
       <div id="alert" class="alert"></div>
       <form id="login-form">
         <div class="form-group">
@@ -23,7 +34,7 @@
           <input type="password" id="password" name="password" autocomplete="current-password"
                  placeholder="请输入密码" required>
         </div>
-        <button type="submit" id="submit-btn" class="btn btn-block">登录</button>
+        <button type="submit" id="submit-btn" class="btn btn-block">登 录</button>
       </form>
       <div class="auth-footer">
         还没有账号？<a href="/pages/register.html">立即注册</a>

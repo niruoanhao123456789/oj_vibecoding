@@ -1,0 +1,252 @@
+/* auth.css — 登录 / 注册页主题：天蓝 × 人文风
+   (仅作用于 .auth-body 下的页面，不影响其他页面) */
+
+.auth-body {
+  min-height: 100vh;
+  background:
+    radial-gradient(1100px 520px at 85% -10%, rgba(56, 189, 248, 0.28), transparent 62%),
+    radial-gradient(820px 480px at 6% 108%, rgba(249, 115, 22, 0.10), transparent 60%),
+    radial-gradient(720px 420px at 55% 118%, rgba(14, 165, 233, 0.12), transparent 62%),
+    linear-gradient(180deg, #e0f4ff 0%, #eef9ff 52%, #fdf7ee 100%);
+  background-attachment: fixed;
+}
+
+/* 柔和漂浮的云影（纯装饰，不拦截交互） */
+.auth-cloud {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(52px);
+  opacity: 0.5;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.auth-cloud-1 {
+  width: 340px;
+  height: 340px;
+  top: 6%;
+  left: -120px;
+  background: radial-gradient(circle, rgba(125, 211, 252, 0.55), rgba(125, 211, 252, 0) 70%);
+  animation: cloud-drift 26s ease-in-out infinite alternate;
+}
+
+.auth-cloud-2 {
+  width: 280px;
+  height: 280px;
+  bottom: 4%;
+  right: -90px;
+  background: radial-gradient(circle, rgba(251, 191, 36, 0.32), rgba(251, 191, 36, 0) 70%);
+  animation: cloud-drift 34s ease-in-out infinite alternate-reverse;
+}
+
+@keyframes cloud-drift {
+  from { transform: translateY(0); }
+  to   { transform: translateY(26px); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .auth-cloud { animation: none; }
+}
+
+/* 顶部导航：融入天空背景 */
+.auth-body nav {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+  border-bottom: none;
+  box-shadow: none;
+  height: 64px;
+}
+
+.auth-body nav .brand {
+  color: #0c4a6e;
+  font-family: Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif;
+  letter-spacing: 0.5px;
+}
+
+.auth-body nav .nav-links a {
+  color: #155e8c;
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.auth-body nav .nav-links a:hover {
+  background: rgba(14, 165, 233, 0.12);
+  color: #0284c7;
+  text-decoration: none;
+}
+
+/* 认证主体：置于云影之上 */
+.auth-page {
+  position: relative;
+  z-index: 1;
+  max-width: 420px;
+  margin: 28px auto 64px;
+  padding: 0 16px;
+}
+
+/* 页头：标题 + 人文风副语 */
+.auth-head {
+  text-align: center;
+  margin-bottom: 24px;
+}
+
+.auth-logo {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 14px;
+  border-radius: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+  box-shadow: 0 10px 22px -8px rgba(14, 165, 233, 0.55);
+}
+
+.auth-logo svg {
+  width: 28px;
+  height: 28px;
+}
+
+.auth-title {
+  margin: 0;
+  font-size: 24px;
+  font-weight: 600;
+  color: #0c4a6e;
+  font-family: Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif;
+  letter-spacing: 1px;
+}
+
+.auth-sub {
+  margin: 8px 0 0;
+  font-size: 14px;
+  color: #0e7490;
+  font-family: Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif;
+  letter-spacing: 1px;
+}
+
+/* 卡片 */
+.auth-card {
+  background: rgba(255, 255, 255, 0.86);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(186, 230, 253, 0.9);
+  border-radius: 18px;
+  padding: 28px 26px;
+  box-shadow: 0 18px 40px -18px rgba(12, 74, 110, 0.28);
+}
+
+.auth-card h1 {
+  display: none; /* 标题已放入页头 */
+}
+
+/* 表单 */
+.auth-card .form-group {
+  margin-bottom: 18px;
+}
+
+.auth-card .form-group label {
+  font-size: 13px;
+  color: #0c4a6e;
+  font-weight: 600;
+  margin-bottom: 6px;
+}
+
+.auth-card .form-group input {
+  background: #f7fbff;
+  border: 1px solid #d3e9fa;
+  border-radius: 10px;
+  padding: 11px 13px;
+  font-size: 15px;
+  color: #0c4a6e;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
+}
+
+.auth-card .form-group input::placeholder {
+  color: #7fb4d8;
+}
+
+.auth-card .form-group input:hover {
+  border-color: #9ccdf5;
+}
+
+.auth-card .form-group input:focus {
+  outline: none;
+  background: #ffffff;
+  border-color: #0ea5e9;
+  box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.16);
+}
+
+/* 提交按钮 */
+.auth-card .btn {
+  width: 100%;
+  padding: 12px;
+  border: none;
+  border-radius: 10px;
+  background: linear-gradient(135deg, #38bdf8, #0ea5e9);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  cursor: pointer;
+  box-shadow: 0 10px 20px -8px rgba(14, 165, 233, 0.55);
+  transition: filter 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.auth-card .btn:hover {
+  filter: brightness(1.05);
+  transform: translateY(-1px);
+  box-shadow: 0 14px 24px -8px rgba(14, 165, 233, 0.6);
+}
+
+.auth-card .btn:active {
+  transform: translateY(0);
+  box-shadow: 0 8px 16px -8px rgba(14, 165, 233, 0.5);
+}
+
+.auth-card .btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* 提示框：与主题协调 */
+.auth-card .alert {
+  border-radius: 10px;
+}
+
+.auth-card .alert-error {
+  background: #fff1ef;
+  border: 1px solid #f7c6c0;
+  color: #b3402e;
+}
+
+.auth-card .alert-success {
+  background: #ecfdf5;
+  border: 1px solid #b7e8cf;
+  color: #1c7a4d;
+}
+
+.auth-card .alert-info {
+  background: #e8f6ff;
+  border: 1px solid #bcdcf5;
+  color: #0e7490;
+}
+
+/* 页脚 */
+.auth-footer {
+  text-align: center;
+  margin-top: 18px;
+  font-size: 14px;
+  color: #64748b;
+}
+
+.auth-footer a {
+  color: #0284c7;
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+
+.auth-footer a:hover {
+  color: #0369a1;
+  text-decoration: none;
+}
