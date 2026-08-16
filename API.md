@@ -143,6 +143,56 @@
   ```
 - **错误**：`404 PROBLEM_NOT_FOUND`（不存在或不可见）。
 
+### 4.3 `POST /api/problems/:id/run` — 自测运行
+
+- **作用**：提交前自测运行当前代码，默认按题目明文样例，用户可自定义用例。
+  **不算正式提交**：不写 `submissions` 表、不计入统计。
+- **路径参数**：`id` 题目 ID（正整数）。
+- **鉴权**：需登录；按题目可见性过滤（学生仅可运行本人可见题目）。
+- **请求体**：
+  ```json
+  {
+    "language": "cpp",
+    "code": "#include <iostream>\n...",
+    "test_cases": [
+      { "input": "1 2\n", "expected": "3\n" },
+      { "input": "7 8\n" }
+    ]
+  }
+  ```
+- **参数约束**：`language` 仅接受 `cpp` / `c`；`code` 非空且 ≤100KB；
+  `test_cases` 为数组（可选，≤20 个），每项 `input` 必填字符串、
+  `expected` 可选（留空则仅显示实际输出，verdict 为 `NONE`）。
+- **响应** `200`：
+  ```json
+  {
+    "ok": true,
+    "data": {
+      "compile": { "ok": true, "timed_out": false, "output": "", "elapsed_ms": 420 },
+      "cases": [
+        {
+          "num": 1,
+          "input": "1 2\n",
+          "expected": "3\n",
+          "actual": "3\n",
+          "verdict": "AC",
+          "time_ms": 4,
+          "memory_kb": 3584,
+          "error": ""
+        }
+      ],
+      "overall": "AC"
+    }
+  }
+  ```
+  - `compile.ok=false` 时返回 `overall` 为 `COMPILE_ERROR` / `COMPILE_TIMEOUT`，
+    `cases` 为空数组，`compile.output` 为编译输出。
+  - `verdict` 取值：`AC` / `WA` / `TLE` / `MLE` / `RE` / `SYSTEM_ERROR` / `NONE`（无期望输出）。
+  - `overall` 优先级：`SYSTEM_ERROR` > `TLE` > `MLE` > `RE` > `WA` > `AC` > `NONE`。
+  - `input` / `expected` / `actual` 超 4000 字节截断。
+- **错误**：`400 PARAM_INVALID`（语言/代码/用例不合法）、
+  `404 PROBLEM_NOT_FOUND`（题目不存在或不可见）、`401 NOT_AUTHENTICATED`。
+
 ## 5. 提交接口
 
 ### 5.1 `POST /api/submissions` — 创建提交
@@ -224,7 +274,7 @@
 
 ### 6.1 `POST /api/class/join` — 学生加入班级
 
-- **作用**：学生凭教师邀请码加入班级，加入后可见该教师题目与全局题目。
+- **作用**：学生凭教师邀请码加入班级，加入后可见该教师发布的题目（全局题对任何登录用户本就可见）。
 - **鉴权**：需 `student` 角色。
 - **请求体**：
   ```json
@@ -414,7 +464,7 @@ PENDING → COMPILING → COMPILE_ERROR / COMPILE_TIMEOUT / RUNNING
 
 ### 11.1 `POST /api/admin/problems/import` — 题目 JSON 导入
 
-- **作用**：导入题目（请求体即题目 JSON，格式见 SPEC 4.10）。管理员导入 → 全局题（`created_by` NULL，所有已入班学生可见）；教师导入 → 本班题（`created_by` 为教师 id）。
+- **作用**：导入题目（请求体即题目 JSON，格式见 SPEC 4.10）。管理员导入 → 全局题（`created_by` NULL，所有登录用户可见）；教师导入 → 本班题（`created_by` 为教师 id）。
 - **鉴权**：需 `teacher` / `admin` 角色。
 - **请求体**：题目 JSON（含 `title`/`description`/`sample_in`/`sample_out` 及 `test_cases` 或 `test_dir`）。
 - **响应** `200`：`{ "ok": true, "data": { "id": 100 } }`。
@@ -422,9 +472,9 @@ PENDING → COMPILING → COMPILE_ERROR / COMPILE_TIMEOUT / RUNNING
 
 ### 11.2 `PUT /api/admin/problems/:id` — 修改题目
 
-- **作用**：修改题目元数据；请求体含 `test_cases` 时整体替换隐藏测试点。
+- **作用**：修改题目元数据；请求体含 `test_cases`（非空数组）时整体替换隐藏测试点，省略 `test_cases` 则仅改元数据、保留原测试点。
 - **鉴权**：需 `teacher` / `admin`。教师仅能改自己发布的题；管理员可改任意题。
-- **请求体**：题目 JSON（必填字段与导入一致）。
+- **请求体**：题目 JSON（`title`/`description`/`sample_in`/`sample_out` 必填；`time_limit_ms`/`memory_limit_mb`/`difficulty` 可选带默认；`test_cases`/`test_dir` 可选）。
 - **错误**：`400 PARAM_INVALID`（无权限/校验失败/题目不存在）、`401/403`。
 
 ### 11.3 `DELETE /api/admin/problems/:id` — 删除题目

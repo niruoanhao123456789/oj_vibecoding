@@ -99,9 +99,9 @@ R=$(curl -s -X POST "$BASE/api/register" -H 'Content-Type: application/json' \
     -d "{\"username\":\"$UNIQ\",\"password\":\"pass123\"}")
 curl -s -c "$JAR" -X POST "$BASE/api/login" -H 'Content-Type: application/json' \
     -d "{\"username\":\"$UNIQ\",\"password\":\"pass123\"}" > /dev/null
-# 未入班学生按可见性规则（SPEC 4.8）列表为空
+# 未入班学生按可见性规则（SPEC 4.9）：可见全局题（无需入班），不可见教师题
 R=$(curl -s -b "$JAR" "$BASE/api/problems")
-check "未入班学生列表为空" '"problems":[]' "$R"
+check "未入班学生可见全局题" 'A+B Problem' "$R"
 curl -s -b "$JAR" -X POST "$BASE/api/logout" > /dev/null
 
 echo "== 静态资源 =="

@@ -44,9 +44,12 @@ struct ProblemData {
 ProblemData parse_problem_json(const std::string& json_path);
 
 // 从 JSON 值解析并校验题目数据；base_dir 用于解析相对 test_dir 路径。
+// require_test_cases 为 true 时强制要求 test_cases 或 test_dir（新建场景）；
+// 为 false 时允许两者均缺（更新场景，仅改元数据）。
 // 失败抛 std::runtime_error。
 ProblemData parse_problem_json_value(const Json::Value& root,
-                                     const std::string& base_dir = "");
+                                     const std::string& base_dir = "",
+                                     bool require_test_cases = true);
 
 // 导入题目：唯一性预检 → 写 problems 表 → 将隐藏测试点落盘到
 // test_root/<id>/ → 回填 test_dir，返回题目 id。

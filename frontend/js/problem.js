@@ -1,7 +1,9 @@
-// problem.js — 题目详情页逻辑（阶段 7：代码编辑器 + 提交 + 轮询结果）
+// problem.js — 题目详情页逻辑（阶段 7：代码编辑器 + 提交 + 轮询结果；自测运行）
 'use strict';
 
 let problemId = null;
+let runCases = [];        // 自测用例 [{ input, expected }]
+let runVerdicts = [];     // 上次运行的逐例 verdict（与 runCases 对齐，用于徽标）
 
 // ── 简易 C/C++ 语法高亮 ──────────────────────────────────────
 // 按行高亮：注释 / 字符串 / 数字 / 关键字 / 预处理指令。
@@ -204,6 +206,11 @@ async function loadProblem() {
     document.getElementById('sample-in').textContent = p.sample_in || '';
     document.getElementById('sample-out').textContent = p.sample_out || '';
 
+    // 自测运行：默认以题目明文样例为用例（用户可增删改）
+    runCases = [{ input: p.sample_in || '', expected: p.sample_out || '' }];
+    runVerdicts = [null];
+    renderRunCases();
+
     document.getElementById('loading').style.display = 'none';
     document.getElementById('problem-content').style.display = 'grid';
     renderEditor();
@@ -297,6 +304,158 @@ function renderResultError(msg) {
   }
 }
 
+// ── 自测运行（运行不算正式提交）──────────────────────────────
+function renderRunCases() {
+  const box = document.getElementById('run-cases');
+  if (!box) return;
+  box.innerHTML = '';
+  if (runCases.length === 0) {
+    box.innerHTML =
+      '<p class="muted" style="font-size:13px;">暂无自测用例，点击下方按钮添加。</p>';
+    return;
+  }
+  runCases.forEach((c, i) => {
+    const row = document.createElement('div');
+    row.className = 'run-case';
+    row.innerHTML =
+      '<div class="run-case-field"><label>输入</label>' +
+      '<textarea class="run-case-input" rows="3"></textarea></div>' +
+      '<div class="run-case-field"><label>期望输出（可留空，仅显示实际输出）</label>' +
+      '<textarea class="run-case-expected" rows="3"></textarea></div>' +
+      '<div class="run-case-verdict"></div>' +
+      '<div class="run-case-del"><button type="button" class="btn btn-sm" ' +
+      'data-del style="background:var(--danger);">删除</button></div>';
+    row.querySelector('.run-case-input').value = c.input;
+    row.querySelector('.run-case-expected').value = c.expected || '';
+    if (runVerdicts[i]) {
+      row.querySelector('.run-case-verdict').innerHTML =
+        c.expected.trim() ? statusBadge(runVerdicts[i]) :
+          '<span class="badge badge-na">' + escapeHtml(runVerdicts[i]) + '</span>';
+    }
+    box.appendChild(row);
+  });
+}
+
+function addRunCase() {
+  runCases.push({ input: '', expected: '' });
+  runVerdicts.push(null);
+  renderRunCases();
+}
+
+function deleteRunCase(row) {
+  const box = document.getElementById('run-cases');
+  const i = Array.prototype.indexOf.call(box.children, row);
+  if (i < 0) return;
+  runCases.splice(i, 1);
+  runVerdicts.splice(i, 1);
+  renderRunCases();
+}
+
+// 用例编辑：实时同步状态并清除该行旧的运行结果
+function onRunCaseEdit(e) {
+  const ta = e.target.closest('textarea');
+  if (!ta) return;
+  const row = ta.closest('.run-case');
+  const box = document.getElementById('run-cases');
+  const i = Array.prototype.indexOf.call(box.children, row);
+  if (i < 0) return;
+  if (ta.classList.contains('run-case-input')) {
+    runCases[i].input = ta.value;
+  } else {
+    runCases[i].expected = ta.value;
+  }
+  runVerdicts[i] = null;
+  row.querySelector('.run-case-verdict').innerHTML = '';
+}
+
+async function handleRun() {
+  const el = document.getElementById('alert');
+  hideAlert(el);
+  const code = document.getElementById('code-editor').value;
+  if (!code.trim()) {
+    showAlert(el, 'error', '代码不能为空');
+    return;
+  }
+  if (code.length > 100 * 1024) {
+    showAlert(el, 'error', '代码过长（超过 100KB）');
+    return;
+  }
+  const language = document.getElementById('lang-select').value;
+  const testCases = runCases.map((c) => ({ input: c.input, expected: c.expected }));
+  const btn = document.getElementById('run-btn');
+  const box = document.getElementById('run-result');
+  btn.disabled = true;
+  btn.textContent = '运行中…';
+  box.style.display = 'none';
+  try {
+    const data = await api('/api/problems/' + problemId + '/run', {
+      method: 'POST',
+      body: { language, code, test_cases: testCases },
+    });
+    renderRunResult(data.data);
+  } catch (err) {
+    showAlert(el, 'error', err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '运行';
+  }
+}
+
+function renderRunResult(d) {
+  const box = document.getElementById('run-result');
+  const compile = d.compile || {};
+  runVerdicts = (d.cases || []).map((c) => c.verdict);
+
+  // 编译失败：直接展示编译输出
+  if (!compile.ok) {
+    const status = compile.timed_out ? 'COMPILE_TIMEOUT' : 'COMPILE_ERROR';
+    box.style.display = 'block';
+    box.innerHTML =
+      '<div class="run-result-summary">运行结果：' + statusBadge(status) +
+      '<span class="muted">（不提交、不计入提交记录）</span></div>' +
+      (compile.output
+        ? '<div class="run-error">' + escapeHtml(compile.output) + '</div>'
+        : '<p class="muted">编译失败（无输出）。</p>');
+    renderRunCases();
+    return;
+  }
+
+  const cases = d.cases || [];
+  const rows = cases.map((c) =>
+    '<tr>' +
+    '<td>' + c.num + '</td>' +
+    '<td>' + (c.verdict === 'NONE'
+      ? '<span class="badge badge-na">无期望输出</span>'
+      : statusBadge(c.verdict)) + '</td>' +
+    '<td>' + formatTime(c.time_ms) + '</td>' +
+    '<td>' + formatMem(c.memory_kb) + '</td>' +
+    '<td><pre class="run-out">' + escapeHtml(c.actual) + '</pre></td>' +
+    '<td>' + (c.expected === ''
+      ? '<span class="muted">—</span>'
+      : '<pre class="run-out">' + escapeHtml(c.expected) + '</pre>') + '</td>' +
+    '<td>' + (c.error
+      ? '<span class="run-error" style="display:block;margin:0;">' + escapeHtml(c.error) + '</span>'
+      : '') + '</td>' +
+    '</tr>'
+  ).join('');
+
+  const summary = d.overall === 'NONE'
+    ? '<span class="muted">未判定（全部用例未提供期望输出）</span>'
+    : '运行结果：' + statusBadge(d.overall);
+
+  box.style.display = 'block';
+  box.innerHTML =
+    '<div class="run-result-summary">' + summary +
+    '<span class="muted">（不提交、不计入提交记录）</span></div>' +
+    (rows
+      ? '<table class="run-result-table"><thead><tr>' +
+        '<th>#</th><th>结果</th><th>耗时</th><th>内存</th>' +
+        '<th>实际输出</th><th>期望输出</th><th>错误信息</th>' +
+        '</tr></thead><tbody>' + rows + '</tbody></table>'
+      : '<p class="muted">无自测用例。</p>');
+  renderRunCases();
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   initPage('problems', true).then((user) => {
     const params = new URLSearchParams(window.location.search);
@@ -324,4 +483,18 @@ document.addEventListener('DOMContentLoaded', () => {
   }
   const btn = document.getElementById('submit-btn');
   if (btn) btn.addEventListener('click', handleSubmit);
+
+  // 自测运行
+  const runBtn = document.getElementById('run-btn');
+  if (runBtn) runBtn.addEventListener('click', handleRun);
+  const runAdd = document.getElementById('run-add-case');
+  if (runAdd) runAdd.addEventListener('click', addRunCase);
+  const runCasesBox = document.getElementById('run-cases');
+  if (runCasesBox) {
+    runCasesBox.addEventListener('input', onRunCaseEdit);
+    runCasesBox.addEventListener('click', (e) => {
+      const del = e.target.closest('button[data-del]');
+      if (del) deleteRunCase(del.closest('.run-case'));
+    });
+  }
 });

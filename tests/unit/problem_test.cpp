@@ -620,9 +620,12 @@ TEST_F(ProblemVisibilityTest, JoinedStudentSeesTeacherAndGlobal) {
               titles.end());
 }
 
-TEST_F(ProblemVisibilityTest, UnjoinedStudentSeesNothing) {
+TEST_F(ProblemVisibilityTest, UnjoinedStudentSeesGlobalOnly) {
     auto titles = visible_titles(student_out_, "student");
-    EXPECT_EQ(titles.size(), 0u);
+    EXPECT_EQ(std::find(titles.begin(), titles.end(), "ut_vis_teacher_prob"),
+              titles.end());
+    EXPECT_NE(std::find(titles.begin(), titles.end(), "ut_vis_global_prob"),
+              titles.end());
 }
 
 TEST_F(ProblemVisibilityTest, AnonymousSeesNothing) {
@@ -638,9 +641,16 @@ TEST_F(ProblemVisibilityTest, DetailVisibleToTeacherAndJoinedStudent) {
 }
 
 TEST_F(ProblemVisibilityTest, DetailHiddenFromUnjoinedAndAnonymous) {
+    // 教师题：未入班学生不可见
     EXPECT_FALSE(detail_visible(teacher_problem_, student_out_, "student"));
+    // 未登录：全局题/教师题均不可见
     EXPECT_FALSE(detail_visible(teacher_problem_, 0, ""));
     EXPECT_FALSE(detail_visible(global_problem_, 0, ""));
+}
+
+TEST_F(ProblemVisibilityTest, UnjoinedStudentSeesGlobalDetail) {
+    EXPECT_TRUE(detail_visible(global_problem_, student_out_, "student"));
+    EXPECT_FALSE(detail_visible(teacher_problem_, student_out_, "student"));
 }
 
 } // namespace

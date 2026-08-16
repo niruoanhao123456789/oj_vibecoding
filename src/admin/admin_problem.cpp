@@ -47,7 +47,8 @@ void update_problem_json(Database& db, unsigned long long id,
                          const Json::Value& root, const std::string& test_root,
                          const std::string& actor_role, unsigned int actor_id) {
     check_problem_owner(db, id, actor_role, actor_id);
-    ProblemData data = parse_problem_json_value(root, "");
+    // require_test_cases=false：允许仅更新元数据，不改动隐藏测试点
+    ProblemData data = parse_problem_json_value(root, "", false);
     update_problem(db, id, data, test_root);
 }
 

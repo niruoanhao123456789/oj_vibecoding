@@ -253,16 +253,114 @@ async function saveConfig(e) {
   }
 }
 
-// ── 教师/管理员：题目管理 ───────────────────────────────────
+// ── 教师/管理员：题目管理（表单化编辑） ─────────────────────
 let allProblems = [];
 let editingProblemId = null;
+let caseSeq = 0;
+
+// 生成一个测试用例行的 HTML
+function caseRowHTML(num, input, output, score) {
+  const scoreVal = (score === '' || score === null || score === undefined) ? '' : String(score);
+  return '<div class="case-row" data-case-row="' + num + '">' +
+    '<div class="case-head">' +
+    '<span class="case-title">测试点 #' + num + '</span>' +
+    '<button type="button" class="btn btn-sm" data-case-del="' + num +
+    '" style="background:var(--danger);">删除</button>' +
+    '</div>' +
+    '<div class="case-fields">' +
+    '<div class="form-group"><label>输入</label>' +
+    '<textarea data-case-input="' + num + '" rows="3">' + escapeHtml(input) + '</textarea></div>' +
+    '<div class="form-group"><label>期望输出</label>' +
+    '<textarea data-case-output="' + num + '" rows="3">' + escapeHtml(output) + '</textarea></div>' +
+    '<div class="form-group" style="flex:0 0 140px;min-width:140px;"><label>分值（可选）</label>' +
+    '<input type="number" data-case-score="' + num + '" value="' + escapeHtml(scoreVal) + '"></div>' +
+    '</div></div>';
+}
+
+function addCaseRow(input, output, score) {
+  caseSeq += 1;
+  const box = document.getElementById('case-editor');
+  const wrap = document.createElement('div');
+  wrap.innerHTML = caseRowHTML(caseSeq, input || '', output || '', score);
+  box.appendChild(wrap.firstChild);
+}
+
+// 收集表单字段 → 题目 JSON 对象
+function collectProblemJSON() {
+  return {
+    title: document.getElementById('prob-title').value.trim(),
+    description: document.getElementById('prob-desc').value,
+    sample_in: document.getElementById('prob-sample-in').value,
+    sample_out: document.getElementById('prob-sample-out').value,
+    time_limit_ms: parseInt(document.getElementById('prob-time').value, 10),
+    memory_limit_mb: parseInt(document.getElementById('prob-mem').value, 10),
+    difficulty: parseInt(document.getElementById('prob-difficulty').value, 10),
+  };
+}
+
+function collectCases() {
+  const cases = [];
+  const rows = document.querySelectorAll('#case-editor [data-case-row]');
+  rows.forEach((row) => {
+    const input = row.querySelector('[data-case-input]').value;
+    const output = row.querySelector('[data-case-output]').value;
+    const scoreEl = row.querySelector('[data-case-score]');
+    const score = (scoreEl && scoreEl.value !== '')
+      ? parseInt(scoreEl.value, 10) : null;
+    cases.push({ input, output, score });
+  });
+  return cases;
+}
+
+function validateProblemForm(json, cases) {
+  if (!json.title) throw new Error('标题不能为空');
+  if (json.title.length > 255) throw new Error('标题过长（≤255 字符）');
+  if (!isFinite(json.time_limit_ms) || json.time_limit_ms <= 0) {
+    throw new Error('CPU 时限必须为正整数');
+  }
+  if (!isFinite(json.memory_limit_mb) || json.memory_limit_mb <= 0) {
+    throw new Error('内存上限必须为正整数');
+  }
+  if (json.difficulty < 1 || json.difficulty > 3) {
+    throw new Error('难度取值必须为 1-3');
+  }
+  if (!editingProblemId && cases.length === 0) {
+    throw new Error('新建题目至少需要 1 个测试点');
+  }
+  cases.forEach((c, i) => {
+    if (c.input === '' && c.output === '') {
+      throw new Error('测试点 #' + (i + 1) + '：输入与期望输出不能同时为空');
+    }
+    if (c.score !== null && isNaN(c.score)) {
+      throw new Error('测试点 #' + (i + 1) + '：分值必须为整数');
+    }
+  });
+}
+
+function resetProblemForm() {
+  editingProblemId = null;
+  caseSeq = 0;
+  document.getElementById('problem-form-title').textContent = '发布新题目';
+  document.getElementById('problem-edit-id').textContent = '';
+  document.getElementById('prob-title').value = '';
+  document.getElementById('prob-difficulty').value = '1';
+  document.getElementById('prob-time').value = '1000';
+  document.getElementById('prob-mem').value = '256';
+  document.getElementById('prob-sample-in').value = '';
+  document.getElementById('prob-sample-out').value = '';
+  document.getElementById('prob-desc').value = '';
+  document.getElementById('case-editor').innerHTML = '';
+  addCaseRow();
+  document.getElementById('problem-import-btn').style.display = 'inline-block';
+  document.getElementById('problem-update-btn').style.display = 'none';
+  document.getElementById('problem-cancel-btn').style.display = 'none';
+}
 
 async function loadProblems() {
   const el = document.getElementById('problem-list');
   try {
     const data = await api('/api/problems');
     allProblems = (data.data && data.data.problems) || [];
-    fillJudgeProblemSelect();
     if (allProblems.length === 0) {
       el.innerHTML = '<p class="muted">暂无题目。</p>';
       return;
@@ -288,29 +386,34 @@ async function loadProblems() {
   }
 }
 
-// 从当前用户可见的题目里取元数据（不含测试点）
+// 修改：拉取详情 + 隐藏测试点，回填表单
 async function startEdit(id) {
   const el = document.getElementById('alert');
   hideAlert(el);
   try {
-    const data = await api('/api/problems/' + id);
-    const p = data.data.problem;
+    const [detail, cases] = await Promise.all([
+      api('/api/problems/' + id),
+      api('/api/admin/problems/' + id + '/testcases'),
+    ]);
+    const p = detail.data.problem;
     editingProblemId = id;
-    const json = {
-      title: p.title,
-      description: p.description,
-      sample_in: p.sample_in,
-      sample_out: p.sample_out,
-      time_limit_ms: p.time_limit_ms,
-      memory_limit_mb: p.memory_limit_mb,
-      difficulty: p.difficulty,
-    };
-    document.getElementById('problem-json').value = JSON.stringify(json, null, 2);
-    document.getElementById('problem-edit-id').textContent =
-      '正在编辑 #' + id + '（可补充 test_cases 以替换测试点）';
+    document.getElementById('problem-form-title').textContent = '修改题目';
+    document.getElementById('problem-edit-id').textContent = '正在编辑 #' + id;
+    document.getElementById('prob-title').value = p.title;
+    document.getElementById('prob-difficulty').value = String(p.difficulty);
+    document.getElementById('prob-time').value = p.time_limit_ms;
+    document.getElementById('prob-mem').value = p.memory_limit_mb;
+    document.getElementById('prob-sample-in').value = p.sample_in;
+    document.getElementById('prob-sample-out').value = p.sample_out;
+    document.getElementById('prob-desc').value = p.description;
+    const tcs = (cases.data && cases.data.testcases) || [];
+    document.getElementById('case-editor').innerHTML = '';
+    caseSeq = 0;
+    tcs.forEach((t) => addCaseRow(t.input, t.output, t.score === null ? '' : t.score));
+    if (tcs.length === 0) addCaseRow();
+    document.getElementById('problem-import-btn').style.display = 'none';
     document.getElementById('problem-update-btn').style.display = 'inline-block';
     document.getElementById('problem-cancel-btn').style.display = 'inline-block';
-    document.getElementById('problem-import-btn').style.display = 'none';
     window.scrollTo(0, document.body.scrollHeight);
   } catch (err) {
     showAlert(el, 'error', err.message);
@@ -318,12 +421,40 @@ async function startEdit(id) {
 }
 
 function cancelEdit() {
-  editingProblemId = null;
-  document.getElementById('problem-json').value = '';
-  document.getElementById('problem-edit-id').textContent = '';
-  document.getElementById('problem-update-btn').style.display = 'none';
-  document.getElementById('problem-cancel-btn').style.display = 'none';
-  document.getElementById('problem-import-btn').style.display = 'inline-block';
+  resetProblemForm();
+}
+
+async function submitProblem() {
+  const el = document.getElementById('alert');
+  hideAlert(el);
+  const json = collectProblemJSON();
+  const cases = collectCases();
+  try {
+    validateProblemForm(json, cases);
+  } catch (err) {
+    showAlert(el, 'error', err.message);
+    return;
+  }
+  // 有测试用例行时才携带 test_cases（编辑元数据时避免误清隐藏测试点）
+  if (cases.length > 0) {
+    json.test_cases = cases.map((c) => {
+      const o = { input: c.input, output: c.output };
+      if (c.score !== null) o.score = c.score;
+      return o;
+    });
+  }
+  const isEdit = !!editingProblemId;
+  try {
+    const data = await api(
+      isEdit ? '/api/admin/problems/' + editingProblemId : '/api/admin/problems/import',
+      { method: isEdit ? 'PUT' : 'POST', body: json });
+    showAlert(el, 'success',
+      isEdit ? '题目已更新' : '题目已发布，ID=' + data.data.id);
+    resetProblemForm();
+    loadProblems();
+  } catch (err) {
+    showAlert(el, 'error', err.message);
+  }
 }
 
 function handleProblemAction(btn) {
@@ -346,56 +477,6 @@ function handleProblemAction(btn) {
       okText: '确认删除题目',
       onConfirm: doDelete,
     });
-  }
-}
-
-async function importProblem() {
-  const el = document.getElementById('alert');
-  hideAlert(el);
-  let root = null;
-  try {
-    root = JSON.parse(document.getElementById('problem-json').value);
-  } catch (e) {
-    showAlert(el, 'error', 'JSON 格式错误：' + e.message);
-    return;
-  }
-  if (!root || typeof root !== 'object' || Array.isArray(root)) {
-    showAlert(el, 'error', 'JSON 必须是一个对象');
-    return;
-  }
-  try {
-    const data = await api('/api/admin/problems/import', {
-      method: 'POST',
-      body: root,
-    });
-    showAlert(el, 'success', '题目已导入，ID=' + data.data.id);
-    document.getElementById('problem-json').value = '';
-    loadProblems();
-  } catch (err) {
-    showAlert(el, 'error', err.message);
-  }
-}
-
-async function updateProblem() {
-  const el = document.getElementById('alert');
-  hideAlert(el);
-  let root = null;
-  try {
-    root = JSON.parse(document.getElementById('problem-json').value);
-  } catch (e) {
-    showAlert(el, 'error', 'JSON 格式错误：' + e.message);
-    return;
-  }
-  try {
-    await api('/api/admin/problems/' + editingProblemId, {
-      method: 'PUT',
-      body: root,
-    });
-    showAlert(el, 'success', '题目已更新');
-    cancelEdit();
-    loadProblems();
-  } catch (err) {
-    showAlert(el, 'error', err.message);
   }
 }
 
@@ -493,161 +574,6 @@ async function exportCsv() {
   }
 }
 
-// ── 教师/管理员：判题配置（限制与测试用例维护）─────────────
-let judgeProblemId = null;
-
-function fillJudgeProblemSelect() {
-  const sel = document.getElementById('judge-problem');
-  if (!sel) return;
-  const cur = judgeProblemId;
-  sel.innerHTML = '<option value="">选择题目…</option>';
-  allProblems.forEach((p) => {
-    const o = document.createElement('option');
-    o.value = p.id;
-    o.textContent = '#' + p.id + ' ' + p.title;
-    sel.appendChild(o);
-  });
-  if (cur) sel.value = cur;
-}
-
-async function onJudgeProblemChange() {
-  const el = document.getElementById('alert');
-  hideAlert(el);
-  const pid = parseInt(document.getElementById('judge-problem').value, 10);
-  judgeProblemId = pid || null;
-  document.getElementById('limit-time').value = '';
-  document.getElementById('limit-mem').value = '';
-  document.getElementById('testcase-list').innerHTML = '';
-  if (!judgeProblemId) return;
-  try {
-    const data = await api('/api/problems/' + pid);
-    const p = data.data.problem;
-    document.getElementById('limit-time').value = p.time_limit_ms;
-    document.getElementById('limit-mem').value = p.memory_limit_mb;
-    await loadTestCases();
-  } catch (err) {
-    showAlert(el, 'error', err.message);
-  }
-}
-
-async function saveLimits() {
-  const el = document.getElementById('alert');
-  hideAlert(el);
-  if (!judgeProblemId) {
-    showAlert(el, 'error', '请先选择题目');
-    return;
-  }
-  const timeVal = document.getElementById('limit-time').value;
-  const memVal = document.getElementById('limit-mem').value;
-  const time = parseInt(timeVal, 10);
-  const mem = parseInt(memVal, 10);
-  if (!timeVal || !memVal || isNaN(time) || isNaN(mem) || time <= 0 || mem <= 0) {
-    showAlert(el, 'error', '时间/内存限制必须为正整数');
-    return;
-  }
-  try {
-    await api('/api/admin/problems/' + judgeProblemId + '/limits', {
-      method: 'PUT',
-      body: { time_limit_ms: time, memory_limit_mb: mem },
-    });
-    showAlert(el, 'success', '判题限制已保存');
-  } catch (err) {
-    showAlert(el, 'error', err.message);
-  }
-}
-
-async function loadTestCases() {
-  const el = document.getElementById('alert');
-  const box = document.getElementById('testcase-list');
-  if (!judgeProblemId) return;
-  try {
-    const data = await api('/api/admin/problems/' + judgeProblemId + '/testcases');
-    const tcs = (data.data && data.data.testcases) || [];
-    if (tcs.length === 0) {
-      box.innerHTML = '<p class="muted">暂无测试用例。</p>';
-      return;
-    }
-    const preview = (s) =>
-      '<pre style="max-width:280px;white-space:pre-wrap;word-break:break-all;' +
-      'margin:0;font-family:monospace;font-size:12px;line-height:1.3;">' +
-      escapeHtml(s) + '</pre>';
-    box.innerHTML = '<table class="table"><thead><tr>' +
-      '<th>#</th><th>输入预览</th><th>期望输出预览</th><th>分值</th><th>操作</th>' +
-      '</tr></thead><tbody>' +
-      tcs.map((t) =>
-        '<tr>' +
-        '<td>' + t.num + '</td>' +
-        '<td>' + preview(t.input) + '</td>' +
-        '<td>' + preview(t.output) + '</td>' +
-        '<td>' + (t.score === null ? '—' : escapeHtml(String(t.score))) + '</td>' +
-        '<td><button class="btn btn-sm" data-tcdel="' + t.num +
-        '" style="background:var(--danger);">删除</button></td>' +
-        '</tr>'
-      ).join('') +
-      '</tbody></table>';
-  } catch (err) {
-    showAlert(el, 'error', err.message);
-  }
-}
-
-async function addTestCase() {
-  const el = document.getElementById('alert');
-  hideAlert(el);
-  if (!judgeProblemId) {
-    showAlert(el, 'error', '请先选择题目');
-    return;
-  }
-  const input = document.getElementById('tc-input').value;
-  const output = document.getElementById('tc-output').value;
-  if (!input && !output) {
-    showAlert(el, 'error', '请填写输入与期望输出');
-    return;
-  }
-  const body = { input, output };
-  const scoreVal = document.getElementById('tc-score').value;
-  if (scoreVal !== '') {
-    const score = parseInt(scoreVal, 10);
-    if (isNaN(score)) {
-      showAlert(el, 'error', '分值必须为整数');
-      return;
-    }
-    body.score = score;
-  }
-  try {
-    await api('/api/admin/problems/' + judgeProblemId + '/testcases', {
-      method: 'POST',
-      body,
-    });
-    showAlert(el, 'success', '测试点已添加');
-    document.getElementById('tc-input').value = '';
-    document.getElementById('tc-output').value = '';
-    document.getElementById('tc-score').value = '';
-    loadTestCases();
-  } catch (err) {
-    showAlert(el, 'error', err.message);
-  }
-}
-
-function deleteTestCase(num) {
-  const el = document.getElementById('alert');
-  hideAlert(el);
-  if (!judgeProblemId) return;
-  openConfirm({
-    message: '确定删除测试点 #' + num + ' 吗？删除后后续编号将前移。',
-    warning: '此操作会删除该测试点的 .in/.out 文件，请确认。',
-    okText: '确认删除',
-    onConfirm: () => {
-      api('/api/admin/problems/' + judgeProblemId + '/testcases/' + num,
-        { method: 'DELETE' })
-        .then(() => {
-          showAlert(el, 'success', '测试点已删除');
-          loadTestCases();
-        })
-        .catch((err) => showAlert(el, 'error', err.message));
-    },
-  });
-}
-
 // ── 初始化 ──────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   initPage('admin', true).then((user) => {
@@ -660,9 +586,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     document.getElementById('problem-panel').style.display = 'block';
     document.getElementById('stats-panel').style.display = 'block';
-    document.getElementById('judge-panel').style.display = 'block';
     loadProblems();
     loadStats();
+    resetProblemForm();
 
     if (user.role === 'teacher') {
       document.getElementById('class-panel').style.display = 'block';
@@ -697,20 +623,16 @@ document.addEventListener('DOMContentLoaded', () => {
   const exportBtn = document.getElementById('export-btn');
   if (exportBtn) exportBtn.addEventListener('click', exportCsv);
 
-  // 判题配置
-  const judgeProblem = document.getElementById('judge-problem');
-  if (judgeProblem) {
-    judgeProblem.addEventListener('change', onJudgeProblemChange);
-  }
-  const limitSave = document.getElementById('limit-save');
-  if (limitSave) limitSave.addEventListener('click', saveLimits);
-  const tcAdd = document.getElementById('tc-add');
-  if (tcAdd) tcAdd.addEventListener('click', addTestCase);
-  const tcList = document.getElementById('testcase-list');
-  if (tcList) {
-    tcList.addEventListener('click', (e) => {
-      const btn = e.target.closest('button[data-tcdel]');
-      if (btn) deleteTestCase(parseInt(btn.dataset.tcdel, 10));
+  // 判题配置 → 题目表单（内联测试用例编辑）
+  const caseAdd = document.getElementById('case-add');
+  if (caseAdd) caseAdd.addEventListener('click', () => addCaseRow());
+  const caseEditor = document.getElementById('case-editor');
+  if (caseEditor) {
+    caseEditor.addEventListener('click', (e) => {
+      const btn = e.target.closest('button[data-case-del]');
+      if (!btn) return;
+      const row = btn.closest('[data-case-row]');
+      if (row) row.remove();
     });
   }
 
@@ -722,9 +644,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
   const importBtn = document.getElementById('problem-import-btn');
-  if (importBtn) importBtn.addEventListener('click', importProblem);
+  if (importBtn) importBtn.addEventListener('click', submitProblem);
   const updateBtn = document.getElementById('problem-update-btn');
-  if (updateBtn) updateBtn.addEventListener('click', updateProblem);
+  if (updateBtn) updateBtn.addEventListener('click', submitProblem);
   const cancelBtn = document.getElementById('problem-cancel-btn');
   if (cancelBtn) cancelBtn.addEventListener('click', cancelEdit);
 });

@@ -147,11 +147,11 @@ TEST_F(SubmissionTest, VisibilityEnforcedOnCreate) {
               "OK");
     EXPECT_EQ(create("student", student_a_, global_problem_, "c", "int main(){}"),
               "OK");
-    // 未入班学生两者均不可见
+    // 未入班学生可提交全局题，但不能提交教师题
     EXPECT_EQ(create("student", student_c_, teacher_problem_, "cpp", "int main(){}"),
               "PROBLEM_NOT_FOUND");
     EXPECT_EQ(create("student", student_c_, global_problem_, "cpp", "int main(){}"),
-              "PROBLEM_NOT_FOUND");
+              "OK");
     // 不存在题目
     EXPECT_EQ(create("admin", admin_, 99999999u, "cpp", "int main(){}"),
               "PROBLEM_NOT_FOUND");

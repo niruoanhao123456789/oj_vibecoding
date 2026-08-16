@@ -34,17 +34,16 @@ bool problem_visible(Database& db, unsigned int problem_id,
         auto q = db.query("SELECT 1 FROM problems WHERE id = ?", problem_id);
         return q && q->row_count() > 0;
     }
-    // 学生：本班教师发布的题目 + 全局题（已入班才可见）
+    // 学生：本班教师发布的题目 + 全局题（任何登录用户可见）
     auto q = db.query(
         "SELECT 1 FROM problems p WHERE p.id = ? AND ("
-        "  (p.created_by IS NULL AND EXISTS "
-        "     (SELECT 1 FROM class_members cm WHERE cm.student_id = ?))"
+        "  p.created_by IS NULL"
         "  OR p.created_by IN "
         "     (SELECT c.teacher_id FROM classes c "
         "      JOIN class_members cm ON cm.class_id = c.id "
         "      WHERE cm.student_id = ?)"
         ")",
-        problem_id, user_id, user_id);
+        problem_id, user_id);
     return q && q->row_count() > 0;
 }
 

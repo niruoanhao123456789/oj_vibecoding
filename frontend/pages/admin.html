@@ -114,54 +114,60 @@
         </div>
       </div>
 
-      <!-- 教师/管理员：判题配置（限制与测试用例维护） -->
-      <div class="panel" id="judge-panel" style="display:none;">
-        <h2>判题配置</h2>
-        <p class="muted">教师仅能配置本人发布的题目；管理员可配置任意题目。</p>
-        <div class="join-row">
-          <select id="judge-problem" style="flex:1;"><option value="">选择题目…</option></select>
-        </div>
-
-        <h3>判题限制</h3>
-        <div class="join-row">
-          <input type="number" id="limit-time" min="1" placeholder="CPU 时限 (ms)">
-          <input type="number" id="limit-mem" min="1" placeholder="内存上限 (MB)">
-          <button type="button" id="limit-save" class="btn">保存限制</button>
-        </div>
-
-        <h3>测试用例</h3>
-        <div id="testcase-list"></div>
-        <div class="form-group" style="margin-top:12px;">
-          <label for="tc-input">输入</label>
-          <textarea id="tc-input" rows="3" style="width:100%;font-family:monospace;font-size:13px;"></textarea>
-        </div>
-        <div class="form-group">
-          <label for="tc-output">期望输出</label>
-          <textarea id="tc-output" rows="3" style="width:100%;font-family:monospace;font-size:13px;"></textarea>
-        </div>
-        <div class="join-row" style="margin-top:8px;">
-          <input type="number" id="tc-score" placeholder="分值（可选）">
-          <button type="button" id="tc-add" class="btn">添加测试点</button>
-        </div>
-      </div>
-
       <!-- 教师/管理员：题目管理 -->
       <div class="panel" id="problem-panel">
         <h2>题目管理</h2>
         <p class="muted">管理员发布为全局题（所有已入班学生可见）；教师发布为本班题。</p>
         <div id="problem-list"></div>
-        <div style="margin-top:16px;">
-          <details>
-            <summary style="cursor:pointer;margin-bottom:8px;">导入 / 修改题目（JSON，格式见 SPEC 4.9）</summary>
-            <div class="form-group">
-              <label for="problem-json">题目 JSON</label>
-              <textarea id="problem-json" rows="12" style="width:100%;font-family:monospace;font-size:13px;"></textarea>
+
+        <div style="margin-top:20px;">
+          <h3 id="problem-form-title">发布新题目</h3>
+          <span id="problem-edit-id" class="muted"></span>
+          <div class="form-group">
+            <label for="prob-title">标题</label>
+            <input type="text" id="prob-title" maxlength="255" placeholder="题目标题（必填）">
+          </div>
+          <div class="join-row">
+            <div class="form-group" style="flex:1;">
+              <label for="prob-difficulty">难度</label>
+              <select id="prob-difficulty">
+                <option value="1">1 简单</option>
+                <option value="2">2 中等</option>
+                <option value="3">3 困难</option>
+              </select>
             </div>
-            <button type="button" id="problem-import-btn" class="btn">导入题目</button>
-            <span id="problem-edit-id" class="muted"></span>
+            <div class="form-group" style="flex:1;">
+              <label for="prob-time">CPU 时限 (ms)</label>
+              <input type="number" id="prob-time" min="1" value="1000">
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label for="prob-mem">内存上限 (MB)</label>
+              <input type="number" id="prob-mem" min="1" value="256">
+            </div>
+          </div>
+          <div class="form-group">
+            <label for="prob-sample-in">样例输入（学生可见）</label>
+            <textarea id="prob-sample-in" rows="3" style="width:100%;font-family:monospace;font-size:13px;"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="prob-sample-out">样例输出（学生可见）</label>
+            <textarea id="prob-sample-out" rows="3" style="width:100%;font-family:monospace;font-size:13px;"></textarea>
+          </div>
+          <div class="form-group">
+            <label for="prob-desc">题目描述（含输入/输出格式、数据范围）</label>
+            <textarea id="prob-desc" rows="8" style="width:100%;font-family:monospace;font-size:13px;"></textarea>
+          </div>
+
+          <h3 style="margin-top:18px;">隐藏测试用例</h3>
+          <p class="muted">对学生不可见，用于正式判题。新建题目至少需要 1 条。</p>
+          <div id="case-editor"></div>
+          <button type="button" id="case-add" class="btn" style="margin-top:8px;">添加测试点</button>
+
+          <div style="margin-top:18px;">
+            <button type="button" id="problem-import-btn" class="btn">发布题目</button>
             <button type="button" id="problem-update-btn" class="btn" style="display:none;background:var(--primary-dark);">保存修改</button>
             <button type="button" id="problem-cancel-btn" class="btn" style="display:none;background:var(--muted);">取消</button>
-          </details>
+          </div>
         </div>
       </div>
     </div>

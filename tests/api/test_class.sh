@@ -124,9 +124,16 @@ R=$(curl -s -b "$JAR_T" "$BASE/api/problems")
 check "教师可见全局题" 'A+B Problem' "$R"
 check "教师可见自己的题" "$PROB_TITLE" "$R"
 
-# 未入班学生：列表为空（无全局题、无教师题）
+# 未入班学生：可见全局题，不可见教师题
 R=$(curl -s -b "$JAR_S2" "$BASE/api/problems")
-check "未入班学生列表为空" '"problems":[]' "$R"
+check "未入班学生可见全局题" 'A+B Problem' "$R"
+if [[ "$R" == *"$PROB_TITLE"* ]]; then
+    echo "FAIL: 未入班学生不应可见教师题 ($PROB_TITLE)"
+    FAIL=$((FAIL + 1))
+else
+    echo "PASS: 未入班学生不可见教师题"
+    PASS=$((PASS + 1))
+fi
 
 R=$(curl -s -b "$JAR_S" "$BASE/api/problems")
 check "入班学生可见全局题" 'A+B Problem' "$R"

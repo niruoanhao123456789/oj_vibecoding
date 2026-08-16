@@ -35,6 +35,7 @@ add_executable(oj_server
   src/judge/compare.cpp
   src/judge/queue.cpp
   src/judge/runner.cpp
+  src/judge/run.cpp
   src/judge/util.cpp
   src/judge/worker.cpp
 )

@@ -111,7 +111,8 @@ static int parse_difficulty(const Json::Value& v) {
 }
 
 ProblemData parse_problem_json_value(const Json::Value& root,
-                                     const std::string& base_dir) {
+                                     const std::string& base_dir,
+                                     bool require_test_cases) {
     if (!root.isObject()) {
         throw std::runtime_error("invalid problem json: root must be an object");
     }
@@ -171,11 +172,12 @@ ProblemData parse_problem_json_value(const Json::Value& root,
             }
             d.test_cases.push_back(std::move(t));
         }
-        if (d.test_cases.empty()) {
+        // 空数组：更新场景视为不替换测试点；新建场景报错
+        if (d.test_cases.empty() && require_test_cases) {
             throw std::runtime_error("test_cases must not be empty");
         }
     }
-    if (d.src_test_dir.empty() && d.test_cases.empty()) {
+    if (d.src_test_dir.empty() && d.test_cases.empty() && require_test_cases) {
         throw std::runtime_error("no test cases: provide test_dir or test_cases");
     }
     return d;
@@ -418,13 +420,12 @@ static bool is_staff_view(const std::string& role) {
 }
 
 static std::string student_visibility_sql() {
-    // 学生可见：本班教师发布的题目 + 全局题（created_by IS NULL 且已入班）
-    return " (p.created_by IS NULL AND EXISTS "
-           "     (SELECT 1 FROM class_members cm WHERE cm.student_id = ?)) "
-           " OR p.created_by IN "
+    // 学生可见：本班教师发布的题目 + 全局题（created_by IS NULL，任何登录用户可见）
+    return " (p.created_by IS NULL "
+           "  OR p.created_by IN "
            "     (SELECT c.teacher_id FROM classes c "
            "      JOIN class_members cm ON cm.class_id = c.id "
-           "      WHERE cm.student_id = ?) ";
+           "      WHERE cm.student_id = ?)) ";
 }
 
 bool query_problem_list(Database& db, unsigned int user_id,
@@ -454,7 +455,7 @@ bool query_problem_list(Database& db, unsigned int user_id,
     }
     auto q = is_staff_view(role)
                  ? db.query(sql)
-                 : db.query(sql, user_id, user_id);
+                 : db.query(sql, user_id);
     if (!q) {
         return false;
     }
@@ -518,8 +519,7 @@ bool query_problem_detail(Database& db, unsigned int id, unsigned int user_id,
         sql = "SELECT id, title, description, sample_in, sample_out, "
               "       time_limit_ms, memory_limit_mb, difficulty "
               "FROM problems p WHERE id = ? AND ("
-              "  p.created_by IS NULL AND EXISTS "
-              "    (SELECT 1 FROM class_members cm WHERE cm.student_id = ?)"
+              "  p.created_by IS NULL"
               "  OR p.created_by IN "
               "    (SELECT c.teacher_id FROM classes c "
               "     JOIN class_members cm ON cm.class_id = c.id "
@@ -530,7 +530,7 @@ bool query_problem_detail(Database& db, unsigned int id, unsigned int user_id,
     }
     auto q = is_staff_view(role)
                  ? db.query(sql, id)
-                 : db.query(sql, id, user_id, user_id);
+                 : db.query(sql, id, user_id);
     if (!q) {
         return false;
     }

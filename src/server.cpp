@@ -10,6 +10,7 @@
 #include "admin/admin_problem.h"
 #include "admin/admin_stats.h"
 #include "admin/admin_user.h"
+#include "judge/run.h"
 #include "judge/worker.h"
 #include "log.h"
 #include "ojclass.h"
@@ -51,6 +52,32 @@ std::string request_token(const httplib::Request& req) {
         e = header.size();
     }
     return header.substr(b, e - b);
+}
+
+// 解析自测运行请求体：language(string) + code(string) + test_cases(数组，可选)。
+// 字段缺失或类型错误返回 false；test_cases 缺省为 null。
+bool parse_run_body(const httplib::Request& req, std::string& language,
+                    std::string& code, Json::Value& test_cases) {
+    if (req.body.empty()) {
+        return false;
+    }
+    Json::Value root;
+    Json::CharReaderBuilder builder;
+    std::string errs;
+    std::istringstream in(req.body);
+    if (!Json::parseFromStream(builder, in, &root, &errs) || !root.isObject()) {
+        return false;
+    }
+    if (!root.isMember("language") || !root["language"].isString()) {
+        return false;
+    }
+    if (!root.isMember("code") || !root["code"].isString()) {
+        return false;
+    }
+    language = root["language"].asString();
+    code = root["code"].asString();
+    test_cases = root.get("test_cases", Json::Value(Json::nullValue));
+    return true;
 }
 
 // 解析提交请求体：problem_id(int) + language(string) + code(string)。
@@ -239,6 +266,41 @@ bool Server::start() {
                   }
                   send_ok(res, data);
               });
+
+    // POST /api/problems/:id/run：自测运行（不算正式提交，不写 submissions）
+    svr_->Post(R"(/api/problems/(\d+)/run)",
+               [&](const httplib::Request& req, httplib::Response& res) {
+                   SessionUser user;
+                   if (!require_auth(db_, req, res, user)) {
+                       return;
+                   }
+                   const unsigned int problem_id = static_cast<unsigned int>(
+                       std::strtoul(req.matches[1].str().c_str(), nullptr, 10));
+                   std::string language, code;
+                   Json::Value test_cases;
+                   if (!parse_run_body(req, language, code, test_cases)) {
+                       send_error(res, 400, kErrParamInvalid,
+                                  "请求体必须是 JSON 且包含字符串 language 与 "
+                                  "code 字段（可选数组 test_cases）");
+                       return;
+                   }
+                   try {
+                       Json::Value data = run_custom_cases(
+                           db_, user.id, user.role, problem_id, language, code,
+                           test_cases);
+                       LOG_INFO("custom run: problem=%u by %s", problem_id,
+                                user.username.c_str());
+                       send_ok(res, data);
+                   } catch (const std::exception& e) {
+                       const std::string msg = e.what();
+                       if (msg == "problem not found") {
+                           send_error(res, 404, kErrProblemNotFound,
+                                      "题目不存在或对当前用户不可见");
+                       } else {
+                           send_error(res, 400, kErrParamInvalid, e.what());
+                       }
+                   }
+               });
 
     // ---- 提交 API（阶段 6）----
 
