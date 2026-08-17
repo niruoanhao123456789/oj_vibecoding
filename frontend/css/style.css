@@ -691,6 +691,114 @@ nav .nav-user {
   overflow: auto;
 }
 
+/* ── 正式提交评测结果（题目页醒目横幅） ───────────────────── */
+.result-box.result-banner {
+  margin-top: 14px;
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--primary);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: #f6fbff;
+  font-size: 14px;
+  box-shadow: 0 4px 14px -10px rgba(12, 74, 110, 0.35);
+}
+
+.result-banner .result-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.result-banner .result-title {
+  font-family: Georgia, "Noto Serif SC", "Songti SC", "SimSun", serif;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 1px;
+  color: var(--text);
+}
+
+.result-banner .result-head .badge {
+  font-size: 18px;
+  line-height: 1.5;
+  padding: 4px 18px;
+  border-radius: 18px;
+}
+
+.result-banner .result-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.result-banner .result-meta b {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.result-banner .result-foot {
+  margin-top: 10px;
+}
+
+.result-banner .result-error {
+  margin-top: 10px;
+}
+
+.result-banner[data-status="AC"] {
+  border-color: #c3e6d2;
+  border-left-color: var(--success);
+  background: #f2fbf6;
+}
+
+.result-banner[data-status="WA"],
+.result-banner[data-status="RE"],
+.result-banner[data-status="TLE"],
+.result-banner[data-status="MLE"],
+.result-banner[data-status="COMPILE_ERROR"],
+.result-banner[data-status="COMPILE_TIMEOUT"] {
+  border-color: #f5c6c2;
+  border-left-color: var(--danger);
+  background: #fef5f4;
+}
+
+.result-banner[data-status="PENDING"],
+.result-banner[data-status="COMPILING"],
+.result-banner[data-status="RUNNING"] {
+  border-color: #f0e0a0;
+  border-left-color: #b8860b;
+  background: #fffdf4;
+}
+
+.result-banner[data-status="SYSTEM_ERROR"] {
+  border-color: #d0d0d6;
+  border-left-color: #6b7280;
+  background: #fafafa;
+}
+
+.result-banner[data-status="PENDING"] .result-title::after,
+.result-banner[data-status="COMPILING"] .result-title::after,
+.result-banner[data-status="RUNNING"] .result-title::after {
+  content: "…";
+  animation: result-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes result-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .result-banner[data-status="PENDING"] .result-title::after,
+  .result-banner[data-status="COMPILING"] .result-title::after,
+  .result-banner[data-status="RUNNING"] .result-title::after {
+    animation: none;
+  }
+}
+
 .timeline {
   display: flex;
   flex-wrap: wrap;

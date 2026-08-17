@@ -61,6 +61,22 @@ int main() {
         </div>
         <div class="editor-status muted">语言：C++（g++ -O2 -std=c++17）／C（gcc -O2 -std=c11）</div>
 
+        <!-- 正式提交评测结果：紧跟编辑器，醒目展示 -->
+        <div class="result-box result-banner" id="result-box" data-status="" style="display:none;">
+          <div class="result-head">
+            <span class="result-title">评测结果</span>
+            <span id="result-status"></span>
+          </div>
+          <div class="result-meta">
+            <span>耗时 <b id="result-time"></b></span>
+            <span>内存 <b id="result-memory"></b></span>
+          </div>
+          <div id="result-error" class="result-error" style="display:none;"></div>
+          <div class="result-foot">
+            <a href="#" id="result-link" style="display:none;">查看提交详情 →</a>
+          </div>
+        </div>
+
         <!-- 自测运行：不提交、不计入提交记录 -->
         <div class="run-panel" id="run-panel">
           <div class="run-panel-head">
@@ -72,25 +88,6 @@ int main() {
             <button type="button" id="run-add-case" class="btn btn-sm">＋ 添加自测用例</button>
           </div>
           <div class="run-result" id="run-result" style="display:none;"></div>
-        </div>
-
-        <div class="result-box" id="result-box" style="display:none;">
-          <div class="result-row">
-            <span>状态</span>
-            <span id="result-status"></span>
-          </div>
-          <div class="result-row">
-            <span>耗时</span>
-            <span id="result-time"></span>
-          </div>
-          <div class="result-row">
-            <span>内存</span>
-            <span id="result-memory"></span>
-          </div>
-          <div id="result-error" class="result-error" style="display:none;"></div>
-          <div style="margin-top:10px;">
-            <a href="#" id="result-link" style="display:none;">查看提交详情 →</a>
-          </div>
         </div>
       </div>
     </div>

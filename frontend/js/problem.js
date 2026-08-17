@@ -262,6 +262,8 @@ async function handleSubmit() {
 
   // 立即展示初始状态并开始轮询
   resultBox.style.display = 'block';
+  resultBox.dataset.status = 'PENDING';
+  resultBox.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   renderResult({ status: 'PENDING', exec_time_ms: null, memory_kb: null });
   renderResultError('');
   btn.textContent = '判题中…';
@@ -284,6 +286,13 @@ async function fetchSubmission(sid) {
 // 更新结果区显示（WA 时展示首个失败点详情）。
 function renderResult(sub) {
   if (!sub) return;
+  const box = document.getElementById('result-box');
+  if (box) {
+    box.dataset.status = sub.status || '';
+    if (TERMINAL_STATUS.has(sub.status)) {
+      box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
   document.getElementById('result-status').innerHTML = statusBadge(sub.status);
   document.getElementById('result-time').textContent = formatTime(sub.exec_time_ms);
   document.getElementById('result-memory').textContent = formatMem(sub.memory_kb);
