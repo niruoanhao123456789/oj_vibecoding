@@ -200,7 +200,7 @@
 - 题目：`GET /api/problems` `GET /api/problems/:id`（按 4.9 可见性规则过滤）`POST /api/problems/:id/run`（自测运行，不算正式提交）
 - 班级：`POST /api/class/join`（学生凭邀请码加入班级）
 - 提交：`POST /api/submissions`（参数含 `language`，仅接受 `cpp`/`c`）`GET /api/submissions?user_id=` `GET /api/submissions/:id`（轮询判题状态）
-- 教师/管理员：`GET/POST /api/admin/class` `POST /api/admin/class/invite` `POST /api/admin/problems/import` `PUT/DELETE /api/admin/problems/:id` `GET /api/admin/stats` `GET /api/admin/submissions/export.csv`
+- 教师/管理员：`GET/POST /api/admin/class` `POST /api/admin/class/invite` `POST /api/admin/problems/import` `PUT/DELETE /api/admin/problems/:id` `PUT /api/admin/problems/:id/limits`（修改判题限制）`GET/POST/DELETE /api/admin/problems/:id/testcases(/:num)`（隐藏测试点维护）`POST /api/admin/submissions/:id/rejudge`（重判）`GET /api/admin/stats` `GET /api/admin/submissions/export.csv`
 - 管理员：`GET/POST /api/admin/users` `PUT/DELETE /api/admin/users/:id` `GET/PUT /api/admin/config`
 
 ## 6. 架构图

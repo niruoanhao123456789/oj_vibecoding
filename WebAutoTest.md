@@ -45,7 +45,7 @@
 | 学生 | 入班、刷题、提交 | 全链路用例主体（§5.4–5.9） |
 
 **如何使用本文档：**
-1. 先读 §2「测试环境与配置」——确认服务器地址、账号（§2.4）、Windows 安装步骤（§2.5）。
+1. 先读 §2「测试环境与配置」——确认服务器地址、账号（§2.4）、Windows 安装步骤（§2.5）或 Linux 安装步骤（§2.6）。
 2. 再读 §3「前置准备」——用例运行前要先造好教师/班级/题目/学生数据（自动化用例会按此处设计自行准备）。
 3. 最后按 §5 用例表逐条执行：每条都写清了前置条件、操作步骤（含页面元素 ID）与预期结果。
 4. 用例编号含义与优先级见 §4；SPEC 章节追踪见 §6；执行与报告见 §7。
@@ -119,7 +119,7 @@ def unique_user():
 
 ### 2.4 预置账号与凭据（测试必备）
 
-> 本小节为全文档唯一权威凭据来源，§2.2、§3 及用例均引用此处。凭据来自项目 `sql/schema.sql` 初始数据；公网服务器为共享环境，**运行前请先按 §2.5 或浏览器手动校验**，若被改动用环境变量覆盖。
+> 本小节为全文档唯一权威凭据来源，§2.2、§3 及用例均引用此处。凭据来自项目 `sql/schema.sql` 初始数据；公网服务器为共享环境，**运行前请先按 §2.5 / §2.6 或浏览器手动校验**，若被改动用环境变量覆盖。
 
 | 项 | 默认值 | 来源/位置 | 用途 | 覆盖方式 |
 |---|---|---|---|---|
@@ -184,6 +184,63 @@ def unique_user():
    | 用例大量 401 / 提示未登录 | 服务器地址或会话异常，先按 §2.4 快速校验 `admin` 登录 |
    | 用例失败且提示「登录已失效」 | 公网共享环境凭据/数据被改动，按 §2.4 校验并注入环境变量 |
 
+### 2.6 Linux 环境准备（从零配置，Ubuntu / CentOS）
+
+> 本小节面向 Linux（Ubuntu / CentOS）上首次配置的测试人员，从装 Python 到跑起第一条用例全流程。命令按 root 或 sudo 用户执行；以下统一使用 `python3`（Windows 下为 `python`，对应命令可参考 §2.5）。
+
+1. **安装 Python 3.10+**
+   - Ubuntu / Debian（apt）：
+     ```bash
+     sudo apt update && sudo apt install -y python3 python3-pip python3-venv
+     ```
+   - CentOS 7（yum）：
+     ```bash
+     sudo yum install -y epel-release
+     sudo yum install -y python3 python3-pip
+     ```
+   - CentOS 8+ / Rocky Linux / AlmaLinux（dnf）：
+     ```bash
+     sudo dnf install -y python3 python3-pip
+     ```
+   - 验证：执行 `python3 --version`，应输出版本号（如 `Python 3.12.x`）。若系统默认 Python 低于 3.10，可安装更高版本后改用 `python3.11` / `python3.12` 执行后续命令。
+2. **安装测试框架**
+   - 执行：
+     ```bash
+     python3 -m pip install --upgrade pip
+     python3 -m pip install pytest playwright pytest-html
+     ```
+   - 安装浏览器内核及系统依赖（仅需 chromium；`--with-deps` 会自动安装缺失的系统依赖库，如 `libnss3`、`libatk`、`libgbm` 等）：
+     ```bash
+     python3 -m playwright install --with-deps chromium
+     ```
+3. **准备测试目录**
+   - 新建目录，例如 `~/oj_webtest/`，将本文档的 `conftest.py`（§2.2）与用例代码放入其中。
+4. **运行用例**
+   - 默认指向公网服务器。**先确定你自己的公网服务器 IP 地址**，通过环境变量 `OJ_WEB_BASE` 指定（或直接修改 `conftest.py` 中的默认值），再运行：
+     ```bash
+     cd ~/oj_webtest
+     python3 -m pytest -q
+     ```
+   - 若需更换服务器地址或管理员密码：
+     ```bash
+     export OJ_WEB_BASE="http://x.x.xxx.xxx:8080"
+     export OJ_ADMIN_PASS="admin123"
+     python3 -m pytest -q
+     ```
+   - 生成 HTML 测试报告：
+     ```bash
+     python3 -m pytest -q --html=report.html
+     ```
+   - 带界面（非无头）人工演示模式：在 `conftest.py` 中把 `headless=True` 改为 `headless=False`，或另加命令行参数。无图形环境（如纯命令行服务器）可改用虚拟显示器运行：`xvfb-run -a python3 -m pytest -q`（需先 `sudo apt install xvfb` 或 `sudo yum install xorg-x11-server-Xvfb`）。
+5. **常见问题排查**
+   | 现象 | 处理 |
+   |---|---|
+   | `python3: command not found` | 按第 1 步安装 Python，然后重新打开终端 |
+   | `ModuleNotFoundError: playwright` | 重新执行 `python3 -m pip install playwright` |
+   | 启动用例报缺少浏览器或缺少 `libnss3`/`libatk` 等系统依赖 | 重新执行 `python3 -m playwright install --with-deps chromium`；CentOS 上若仍有缺失，可 `sudo yum install -y nss atk at-spi2-atk libxkbcommon libXcomposite libXdamage libXfixes libXrandr libgbm pango gtk3` |
+   | 用例大量 401 / 提示未登录 | 服务器地址或会话异常，先按 §2.4 快速校验 `admin` 登录 |
+   | 用例失败且提示「登录已失效」 | 公网共享环境凭据/数据被改动，按 §2.4 校验并注入环境变量 |
+
 ---
 
 ## 3. 前置准备（Fixture 级测试数据）
@@ -192,7 +249,7 @@ def unique_user():
 
 | 步骤 | 操作 | 说明 |
 |---|---|---|
-| P1 | 管理员 `admin` 登录（凭据见 §2.4），进入「管理」→「系统配置」，读取并保存当前教师邀请码（默认 `TEACH-2026`） | 用例 T-ADM-XXX 依赖 |
+| P1 | 管理员 `admin` 登录（凭据见 §2.4），进入「管理」→「系统配置」，读取并保存当前教师邀请码（默认 `TEACH-2026`） | 用例 WT-ADM-XXX 依赖 |
 | P2 | 注册教师 `ui_{ts}_tch`（注册页填写教师邀请码）→ 登录 → 管理端创建班级 `UI自动班{ts}` → 记录班级邀请码 | 供学生入班 |
 | P3 | 8 道全局种子题由 `oj_db_reset` 提供（难度 1/2/3 各 ≥2 题，含 TLE/MLE 探针，见 §2.3）。教师可另发 1 道本班题 `UI A+B {ts}`（2 个测试点）用于验证「本班题可见性」，如需可再发 1 道难度 3 本班题 | 供 AC/WA/TLE/难度筛选/可见性用例 |
 | P4 | 注册学生 `ui_{ts}_stu`（不留邀请码）→ 登录 → 凭 P2 邀请码加入班级 | 供提交类用例 |
@@ -226,9 +283,9 @@ def unique_user():
 
 | 用例 | 前置 | 步骤 | 预期结果 |
 |---|---|---|---|
-| **WT-AUTH-001**（P1）落地页加载 | 无 | 访问 `GET /`；断言 `<nav id="main-nav">` 存在、品牌链接 `.brand` 文本「OJ Vibecoding」、主 CTA `#hero-cta-primary` 文本「立即注册」 | 页面 200，渲染完成，无 JS 报错；`#landing-stats` 初始为隐藏 |
+| **WT-AUTH-001**（P1）落地页加载 | 无 | 访问 `GET /`；断言 `<nav id="main-nav">` 存在、品牌链接 `.brand` 文本「OJ Vibecoding」、主 CTA `#hero-cta-primary` 文本「立即注册」 | 页面 200，渲染完成，无 JS 报错；`#landing-stats`：存在可见题目数据时显示（含 `#stat-problems` 题目数、`#stat-submits` 累计提交、`#stat-rate` 平均通过率），无题目数据时保持隐藏 |
 | **WT-AUTH-002**（P1）未登录导航 | 未登录 | 访问首页，断言 `#nav-auth` 内容 | 显示「登录」「注册」两个链接，无用户名、无「登出」 |
-| **WT-AUTH-003**（P2）已登录导航与 CTA | 已登录学生 | 访问首页 | `#nav-auth` 显示 `用户名(student)` 与「登出」链接；`#hero-cta-primary` 文案变「进入题库」且 href 指向 `/pages/problems.html`；导航含「题目」「提交记录」「我的统计」 |
+| **WT-AUTH-003**（P2）已登录导航与 CTA | 已登录学生 | 访问首页 | `#nav-auth` 显示 `用户名(student)` 与「登出」链接；`#hero-cta-primary` 文案变「进入题库」且 href 指向 `/pages/problems.html`，`#hero-cta-secondary` 变「查看我的统计」且 href 指向 `/pages/stats.html`（`#cta-primary`/`#cta-secondary` 同逻辑变「开始刷题」「查看统计」）；导航含「题目」「提交记录」「我的统计」 |
 | **WT-AUTH-004**（P2）教师/管理员导航 | 已登录教师 | 访问首页 | `#nav-auth` 额外含「管理」链接（`/pages/admin.html`） |
 
 ### 5.2 注册（对应 SPEC 7.2、阶段 3）
@@ -270,7 +327,7 @@ def unique_user():
 | **WT-PROB-006**（P1）状态徽标 | 学生对某题 AC、另一题 WA 提交过（种子题 ≥2 道即可） | 查看列表「我的状态」列 | AC 题显示 `AC` 徽标；WA/RE 等显示「尝试中」；未作答显示「未作答」 |
 | **WT-PROB-007**（P1）加入班级成功 | 教师已建班，学生未入班 | `#invite-code` 填邀请码，点 `#join-btn` | `#alert`「加入班级成功」，邀请码清空，题目列表刷新出现本班题 |
 | **WT-PROB-008**（P1）无效邀请码 | — | 填 `XXXXXX` | `#alert`「班级邀请码无效」（400 `INVITE_CODE_INVALID`） |
-| **WT-PROB-009**（P1）重复加入班级 | 学生已入班 | 再次用同邀请码提交 | `#alert` 提示已在该班级（`ALREADY_JOINED`） |
+| **WT-PROB-009**（P1）重复加入班级 | 学生已入班 | 再次用同邀请码提交 | `#alert` 提示「已在该班级中」（`ALREADY_JOINED`，当前实现映射为 500） |
 | **WT-PROB-010**（P1）空邀请码 | — | 点加入不填 | `#alert`「请输入邀请码」 |
 | **WT-PROB-011**（P1）题目跳转 | — | 点击题目标题链接 | 跳转 `/pages/problem.html?id=<id>` |
 
@@ -314,7 +371,7 @@ def unique_user():
 
 | 用例 | 前置 | 步骤 | 预期结果 |
 |---|---|---|---|
-| **WT-SUB-001**（P0）提交 AC | 已入班学生，A+B 题 | 填 AC 代码点 `#submit-btn` | 点击后按钮变「判题中…」；`#result-box` 显示 `排队中→编译→判题→通过` 过程（可捕捉中间状态 PENDING/COMPILING/RUNNING 至少其一，受竞速影响允许仅断言终态）；最终 `#result-status`=通过(AC)，`#result-time`/`#result-memory` 有值；出现「查看提交详情 →」链接 |
+| **WT-SUB-001**（P0）提交 AC | 已入班学生，A+B 题 | 填 AC 代码点 `#submit-btn` | 点击后按钮先变「提交中…」再变「判题中…」；`#result-box` 显示 `排队中→编译→判题→通过` 过程（可捕捉中间状态 PENDING/COMPILING/RUNNING 至少其一，受竞速影响允许仅断言终态）；最终 `#result-status`=通过(AC)，`#result-time`/`#result-memory` 有值；出现「查看提交详情 →」链接 |
 | **WT-SUB-002**（P0）提交 WA | 同前，填 `a-b` 代码 | 提交 | 终态 `#result-status`=答案错误(WA)；`#result-error` 显示首个失败测试点详情（含 Input/Expected/Actual） |
 | **WT-SUB-003**（P0）编译错误 CE | 填语法错误代码 | 提交 | 终态「编译错误」，`#result-error` 显示编译器输出（截断 ≤15KB） |
 | **WT-SUB-004**（P0）超时 TLE | 打开种子题「无限循环探针」（`time_limit_ms=100`） | 提交死循环代码 | 终态「超时」，错误信息含超时测试点号与 CPU 限制 |
@@ -323,7 +380,7 @@ def unique_user():
 | **WT-SUB-007**（P1）空代码提交 | — | 清空代码提交 | `#alert`「代码不能为空」，不发请求 |
 | **WT-SUB-008**（P1）超长代码提交 | 输入 >100KB 文本（可脚本填充） | 提交 | `#alert`「代码过长（超过 100KB）」 |
 | **WT-SUB-009**（P1）C 语言提交 | 填 C 代码 | 提交 | 判题正常，语言列显示 C |
-| **WT-SUB-010**（P1）非 C/C++ 语言拒绝 | 通过接口构造 `language=python` 或页面伪造 | 提交 | 400 `PARAM_INVALID`，前端提示「不支持的编程语言」（对应 SPEC 9） |
+| **WT-SUB-010**（P1）非 C/C++ 语言拒绝 | 通过接口构造 `language=python` 或页面伪造 | 提交 | 400 `PARAM_INVALID`，`#alert` 提示「仅支持 C++ 与 C 语言（language 取 cpp 或 c）」（对应 SPEC 9） |
 | **WT-SUB-011**（P1）宽松比较不误判 | 提交输出含行尾空格/空行差异的正确代码 | 提交 | 仍为 AC（忽略空白与空行，对应 SPEC 3「宽松比较」） |
 | **WT-SUB-012**（P1）WA 展示首失败点 | WA 提交完成后 | 点击 `#result-link` 或查看详情页 | 详情页错误区含「Wrong Answer on test case 1」及输入/期望/实际输出 |
 
@@ -354,14 +411,14 @@ def unique_user():
 
 | 用例 | 前置 | 步骤 | 预期结果 |
 |---|---|---|---|
-| **WT-TEACH-001**（P0）班级创建与查看 | 教师登录，未建班 | 访问 `/pages/admin.html` → `#class-panel` 显示 → 填 `#class-name` 点 `#class-submit` | `#class-info` 显示班级名、邀请码、成员列表（空） |
+| **WT-TEACH-001**（P0）班级创建与查看 | 教师登录，未建班 | 访问 `/pages/admin.html` → `#class-panel` 显示 → 填 `#class-name` 点 `#class-submit` | `#class-info` 显示班级名、邀请码、成员列表（空成员提示「暂无成员」）；`#alert`「班级就绪」 |
 | **WT-TEACH-002**（P1）重置邀请码 | 已有班级 | 点 `#invite-btn` | 邀请码变化（旧码失效：学生用旧码加入失败）；`#alert`「邀请码已重置」 |
 | **WT-TEACH-003**（P1）成员列表 | 学生已入班 | 教师刷新管理页查看 `#class-info` | 成员列表包含该学生用户名 |
 | **WT-TEACH-004**（P0）网页表单新建题目 | 教师 | `#prob-title`/`#prob-desc`/`#prob-sample-in`/`#prob-sample-out` 填好，`#case-add` 添加 1 个测试点，填 input/output，点 `#problem-import-btn` | `#alert`「题目已发布，ID=x」；`#problem-list` 出现新题 |
 | **WT-TEACH-005**（P1）新建题目校验 | — | 空标题提交 | `#alert`「标题不能为空」；限时/内存非正数 → 对应提示 |
 | **WT-TEACH-006**（P1）新建题目至少 1 测试点 | — | 不加测试点直接发布 | `#alert`「新建题目至少需要 1 个测试点」 |
 | **WT-TEACH-007**（P1）编辑题目 | 教师题存在 | 点行内「修改」→ 表单回填（`startEdit` 拉详情+测试点）→ 改标题/描述 → 点 `#problem-update-btn` | `#alert`「题目已更新」；列表标题更新 |
-| **WT-TEACH-008**（P1）删除题目（二次确认） | 教师题存在 | 点行内「删除」 | 弹出 `#confirm-modal`；点「确认执行」→ `#alert`「题目已删除」，列表移除；点「取消」不删除 |
+| **WT-TEACH-008**（P1）删除题目（二次确认） | 教师题存在 | 点行内「删除」 | 弹出 `#confirm-modal`（`#confirm-ok` 文案「确认删除题目」）；点 `#confirm-ok` → `#alert`「题目已删除」，列表移除；点 `#confirm-cancel`（「取消」）不删除 |
 | **WT-TEACH-009**（P1）教师仅能操作本人题 | 教师 A/B 各发布一题 | 教师 B 打开管理页 | B 的题目列表仅见本人题（`GET /api/problems` 可见性）；对 A 的题 ID 发起删除 → 403/报错 |
 | **WT-TEACH-010**（P1）统计页 | 本班学生已提交 | 查看「统计」区 | `#st-total`、`#st-ac`、`#st-rate` 与数据一致；「各题提交统计」「学生提交情况」表格正确 |
 | **WT-TEACH-011**（P0）CSV 导出 | 有提交数据 | 点 `#export-btn`（默认全部） | 触发下载 `submissions.csv`（`Content-Disposition`），文件含表头与记录（BOM+CRLF） |
@@ -429,7 +486,7 @@ def unique_user():
 
 ## 7. 执行与报告
 
-1. **执行方式**：`pytest -q --html=report.html`（安装 `pytest-html`）；指定浏览器：`pytest --browser chromium`。
+1. **执行方式**：`pytest -q --html=report.html`（安装 `pytest-html`）。浏览器固定为 chromium（由 `conftest.py` 直接 `chromium.launch`）；若需 `pytest --browser chromium` 命令参数，可额外安装 `pytest-playwright` 并使用其 fixtures。
 2. **基线**：建议每轮发版/部署后对 `P0` 用例集回归（约 18 条），全量 `P0+P1` 每迭代执行。
 3. **定位器基线**：优先使用稳定 ID（上文已列）；动态数据用 `:has-text()` 或 `get_by_text()`；等待统一用 Playwright `expect` 自动重试，避免固定 `sleep`。
 4. **失败处理**：每用例失败时截图 + 保存 HTML 快照 + 打印 `#alert` 文本，便于定位前端渲染问题。
