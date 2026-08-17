@@ -1,7 +1,7 @@
 # WebAutoTest.md — 仿 LeetCode 教学 OJ 系统 Web 自动化测试用例设计
 
 > 依据：`SPEC.md`（功能点/业务规则/页面描述）+ `frontend/pages/*.html` 与 `frontend/js/*.js`（实际 DOM 结构与交互逻辑）+ `API.md`（接口契约）。
-> 技术栈：**Node.js + @playwright/test**（chromium/webkit/firefox，统一由 Playwright 驱动）。
+> 技术栈：**Python 3 + pytest + Playwright**（chromium/webkit/firefox）。
 > 被测环境：**公网服务器** `http://x.x.xxx.xxx:8080`（`oj_server` 监听 `0.0.0.0:8080`，已探活通过 `GET /api/health` → `200`）。`x.x.xxx.xxx` 为占位符，**测试者需将其替换为自己的公网服务器 IP 地址**（或通过环境变量 `OJ_WEB_BASE` 指定）。
 
 ---
@@ -34,7 +34,7 @@
 > 本小节面向**对本项目完全不了解**的测试人员（例如在 Windows 机器上首次接手）。花 3 分钟读完，即可按本文档独立搭建环境并执行用例。
 
 **这是什么系统？**
-一个仿 LeetCode 的在线判题（OJ）教学平台：学生在网页上浏览题目、编写 C/C++ 代码、提交后由后端异步判题，实时看到「通过 / 答案错误 / 超时」等结果；教师建班发题、看统计；管理员管用户与系统配置。你只需要一个浏览器和 Node.js 环境，无需搭建服务器、无需懂 C++ 或数据库。
+一个仿 LeetCode 的在线判题（OJ）教学平台：学生在网页上浏览题目、编写 C/C++ 代码、提交后由后端异步判题，实时看到「通过 / 答案错误 / 超时」等结果；教师建班发题、看统计；管理员管用户与系统配置。你只需要一个浏览器和 Python 环境，无需搭建服务器、无需懂 C++ 或数据库。
 
 **三种角色（测试中会用到）：**
 
@@ -62,77 +62,40 @@
 | 数据库 | MySQL（单机，见 `config/server.json`） |
 | 探活接口 | `GET http://x.x.xxx.xxx:8080/api/health` → `{"status":"ok"}` |
 
-### 2.2 自动化框架配置（Node.js + @playwright/test）
-```js
-// playwright.config.js（设计示例，置于测试目录根）
-const { defineConfig } = require('@playwright/test');
+### 2.2 自动化框架配置
+```python
+# conftest.py（设计示例）
+import os
+import time
+import pytest
+from playwright.sync_api import sync_playwright
 
-const BASE_URL = process.env.OJ_WEB_BASE || 'http://x.x.xxx.xxx:8080';
+BASE_URL = os.environ.get("OJ_WEB_BASE", "http://x.x.xxx.xxx:8080")
+# 预置管理员凭据，见 §2.4；若管理员密码被修改则用环境变量覆盖
+ADMIN_USER = os.environ.get("OJ_ADMIN_USER", "admin")
+ADMIN_PASS = os.environ.get("OJ_ADMIN_PASS", "admin123")
+# 教师注册邀请码，见 §2.4；若被管理员修改则用环境变量覆盖
+TEACHER_CODE = os.environ.get("OJ_TEACHER_CODE", "TEACH-2026")
 
-module.exports = defineConfig({
-  testDir: './tests',               // 用例目录（*.spec.js）
-  timeout: 120000,                  // 单用例超时（判题轮询最长 180s，建议 ≥120s）
-  expect: { timeout: 15000 },       // expect 自动重试上限（覆盖判题异步轮询）
-  workers: 1,                       // 公网共享环境：默认单 worker，避免数据冲突
-  fullyParallel: false,
-  use: {
-    baseURL: BASE_URL,              // 用例内 goto('/xxx') 均基于此地址
-    headless: true,                 // 默认无头；人工演示改用 --headed
-    screenshot: 'only-on-failure',
-    trace: 'retain-on-failure',     // 失败自动保留 trace，可回放定位
-  },
-  reporter: [
-    ['list'],
-    ['html', { outputFolder: 'playwright-report', open: 'never' }],
-  ],
-});
+@pytest.fixture(scope="session")
+def browser():
+    with sync_playwright() as p:
+        yield p.chromium.launch(headless=True)
+
+@pytest.fixture
+def page(browser):
+    ctx = browser.new_context()
+    page = ctx.new_page()
+    yield page
+    ctx.close()
+
+@pytest.fixture
+def unique_user():
+    ts = str(int(time.time() * 1000))
+    return f"ui_{ts}"
 ```
 
-```js
-// tests/fixtures.js（设计示例：共享凭据 / 唯一命名工具）
-const { test, expect } = require('@playwright/test');
-
-// 预置管理员凭据，见 §2.4；若被修改则用环境变量覆盖
-const ADMIN_USER = process.env.OJ_ADMIN_USER || 'admin';
-const ADMIN_PASS = process.env.OJ_ADMIN_PASS || 'admin123';
-// 教师注册邀请码，见 §2.4；若被管理员修改则用环境变量覆盖
-const TEACHER_CODE = process.env.OJ_TEACHER_CODE || 'TEACH-2026';
-
-// 唯一命名：时间戳后缀，避免与存量数据/并行运行冲突（见 §2.3）
-function uniqueName(suffix) {
-  return `ui_${Date.now()}_${Math.floor(Math.random() * 1000)}_${suffix}`;
-}
-
-module.exports = { test, expect, ADMIN_USER, ADMIN_PASS, TEACHER_CODE, uniqueName };
-```
-
-```js
-// tests/wt_auth.spec.js（设计示例：一条完整用例）
-const { test, expect, ADMIN_USER, ADMIN_PASS, TEACHER_CODE, uniqueName } = require('./fixtures');
-
-test('WT-AUTH-005 学生注册成功', async ({ page }) => {
-  const username = uniqueName('stu');
-  await page.goto('/pages/register.html');
-  await page.fill('#username', username);
-  await page.fill('#password', 'abc123');
-  await page.fill('#confirm', 'abc123');
-  await page.click('#submit-btn');
-  await expect(page).toHaveURL(/registered=1/);
-  await expect(page.locator('#alert')).toContainText('注册成功，请登录');
-});
-
-test('WT-AUTH-007 教师邀请码错误', async ({ page }) => {
-  await page.goto('/pages/register.html');
-  await page.fill('#username', uniqueName('tch'));
-  await page.fill('#password', 'abc123');
-  await page.fill('#confirm', 'abc123');
-  await page.fill('#teacher-code', 'WRONG-CODE');
-  await page.click('#submit-btn');
-  await expect(page.locator('#alert')).toContainText('教师邀请码无效');
-});
-```
-
-依赖安装：`npm install -D @playwright/test && npx playwright install chromium`
+依赖安装：`pip install pytest playwright && playwright install chromium`
 
 ### 2.3 测试数据策略（公网共享服务器注意事项）
 - **唯一性**：所有注册用户、题目标题均使用时间戳后缀（如 `ui_169xxxxxxxx_stu`），避免与存量数据/并行运行冲突。
@@ -152,7 +115,7 @@ test('WT-AUTH-007 教师邀请码错误', async ({ page }) => {
   | 素数判断 | 3 | 4 测试点（test_dir） | 难度 3、test_dir 覆盖 |
 
   故前置用例无需再造 A+B/超时/超内存题，直接使用种子题即可。种子题由 `./build/oj_db_reset --config config/server.json --yes` 一键生成（幂等，`--seed-only` 可单独重跑）；执行重置会清空全部业务数据，故「未登录 → 空列表」类断言应放在运行 `oj_db_reset` 之后、其它用例造数之前验证。
-- **判题异步**：提交后依赖轮询（前端 `pollSubmission`，间隔 1200ms，超时 180s）。自动化中 `expect(locator).toHaveText(...)` 使用 Playwright 自动重试即可，必要时手动轮询 `GET /api/submissions/:id` 至终态（终态集合见 `common.js` `TERMINAL_STATUS`）。
+- **判题异步**：提交后依赖轮询（前端 `pollSubmission`，间隔 1200ms，超时 180s）。自动化中 `expect(locator).to_have_text(...)` 使用 Playwright 自动重试即可，必要时手动轮询 `GET /api/submissions/:id` 至终态（终态集合见 `common.js` `TERMINAL_STATUS`）。
 
 ### 2.4 预置账号与凭据（测试必备）
 
@@ -177,49 +140,47 @@ test('WT-AUTH-007 教师邀请码错误', async ({ page }) => {
 
 ### 2.5 Windows 环境准备（从零配置）
 
-> 本小节面向 Windows 上首次配置的测试人员，从装 Node.js 到跑起第一条用例全流程。
+> 本小节面向 Windows 上首次配置的测试人员，从装 Python 到跑起第一条用例全流程。
 
-1. **安装 Node.js 18+（含 npm）**
-   - 从官网（`https://nodejs.org/`）下载 **LTS** 版安装包（如 `node-v20.x.x-x64.msi`）。
-   - 安装时勾选默认项即可（已含 **Add to PATH**）。
-   - 验证：打开 CMD 或 PowerShell，执行 `node --version` 与 `npm --version`，均应输出版本号。
-2. **初始化并安装测试框架**
-   - 在测试目录（或项目根）执行：
+1. **安装 Python 3.10+**
+   - 从官网（`https://www.python.org/downloads/`）下载安装包。
+   - 安装时务必勾选 **Add python.exe to PATH**（否则命令行找不到 `python`）。
+   - 验证：打开 CMD 或 PowerShell，执行 `python --version`，应输出版本号（如 `Python 3.12.x`）。
+2. **安装测试框架**
+   - 在 CMD/PowerShell 中执行：
      ```powershell
-     npm init -y
-     npm install -D @playwright/test
+     python -m pip install --upgrade pip
+     python -m pip install pytest playwright pytest-html
      ```
    - 下载浏览器内核（仅需 chromium 即可）：
      ```powershell
-     npx playwright install chromium
+     python -m playwright install chromium
      ```
 3. **准备测试目录**
-   - 在 Windows 上新建目录，例如 `C:\oj_webtest\`，将本文档的 `playwright.config.js`、`tests/fixtures.js`（§2.2）与用例 `.spec.js` 文件放入其中。
+   - 在 Windows 上新建目录，例如 `C:\oj_webtest\`，将本文档的 `conftest.py`（§2.2）与用例代码放入其中。
 4. **运行用例**
-   - 默认指向公网服务器。**先确定你自己的公网服务器 IP 地址**，通过环境变量 `OJ_WEB_BASE` 指定（或直接修改 `playwright.config.js` 中的 `baseURL` 默认值），再运行：
+   - 默认指向公网服务器。**先确定你自己的公网服务器 IP 地址**，通过环境变量 `OJ_WEB_BASE` 指定（或直接修改 `conftest.py` 中的默认值），再运行：
      ```powershell
      cd C:\oj_webtest
-     npx playwright test
+     python -m pytest -q
      ```
    - 若需更换服务器地址或管理员密码：
      ```powershell
      $env:OJ_WEB_BASE="http://x.x.xxx.xxx:8080"
      $env:OJ_ADMIN_PASS="admin123"
-     npx playwright test
+     python -m pytest -q
      ```
-   - 查看 HTML 测试报告：配置已启用 `html` reporter，运行后自动生成 `playwright-report/index.html`，执行 `npx playwright show-report` 在浏览器打开。
-   - 带界面（非无头）人工演示模式：`npx playwright test --headed`。
-   - 指定运行某条用例 / 浏览器：
+   - 生成 HTML 测试报告：
      ```powershell
-     npx playwright test --grep "WT-AUTH-005"     # 按用例标题过滤
-     npx playwright test --project=chromium        # 指定浏览器（默认 chromium）
+     python -m pytest -q --html=report.html
      ```
+   - 带界面（非无头）人工演示模式：在 `conftest.py` 中把 `headless=True` 改为 `headless=False`，或另加命令行参数。
 5. **常见问题排查**
    | 现象 | 处理 |
    |---|---|
-   | `node` 不是内部或外部命令 | 重装 Node.js 并勾选 Add to PATH，然后重新打开终端 |
-   | `ERR_MODULE_NOT_FOUND: @playwright/test` | 重新执行 `npm install -D @playwright/test` |
-   | 启动用例报缺少浏览器 | 重新执行 `npx playwright install chromium` |
+   | `python` 不是内部或外部命令 | 重装 Python 并勾选 Add to PATH，然后重新打开终端 |
+   | `ModuleNotFoundError: playwright` | 重新执行 `python -m pip install playwright` |
+   | 启动用例报缺少浏览器 | 重新执行 `python -m playwright install chromium` |
    | 用例大量 401 / 提示未登录 | 服务器地址或会话异常，先按 §2.4 快速校验 `admin` 登录 |
    | 用例失败且提示「登录已失效」 | 公网共享环境凭据/数据被改动，按 §2.4 校验并注入环境变量 |
 
@@ -468,8 +429,8 @@ test('WT-AUTH-007 教师邀请码错误', async ({ page }) => {
 
 ## 7. 执行与报告
 
-1. **执行方式**：`npx playwright test`；HTML 报告自动生成于 `playwright-report/`，用 `npx playwright show-report` 查看；指定浏览器：`npx playwright test --project=chromium`；指定用例：`npx playwright test --grep "WT-"`。
-2. **基线**：建议每轮发版/部署后对 `P0` 用例集回归（约 18 条，`npx playwright test --grep "P0"` 或按文件分片），全量 `P0+P1` 每迭代执行。
+1. **执行方式**：`pytest -q --html=report.html`（安装 `pytest-html`）；指定浏览器：`pytest --browser chromium`。
+2. **基线**：建议每轮发版/部署后对 `P0` 用例集回归（约 18 条），全量 `P0+P1` 每迭代执行。
 3. **定位器基线**：优先使用稳定 ID（上文已列）；动态数据用 `:has-text()` 或 `get_by_text()`；等待统一用 Playwright `expect` 自动重试，避免固定 `sleep`。
 4. **失败处理**：每用例失败时截图 + 保存 HTML 快照 + 打印 `#alert` 文本，便于定位前端渲染问题。
 5. **公网服务器风险提示**：共享环境数据可能被他人修改（如教师邀请码、题目），用例运行前先校验预置数据，失败后提示运行 `scripts/run_tests.sh --no-unit` 确认接口层健康。
@@ -479,8 +440,8 @@ test('WT-AUTH-007 教师邀请码错误', async ({ page }) => {
 ## 8. 待办/建议
 
 - [x] 判题六类结果所需特殊题（TLE/MLE 探针题）已作为种子题由 `oj_db_reset` 提供（§2.3），RE/CE 用例可直接在任一题上以对应代码触发。
-- [ ] 配置 `@playwright/test` HTML 报告输出路径（`playwright-report/`）与失败 `trace` 归档（`test-results/`）。
+- [ ] 为 `pytest-html` / Allure 集成报告输出路径（`artifacts/`）。
 - [ ] 增加 `--headed` 人工演示模式，跑通第 11 章验收演示。
 - [ ] 将「判题六类结果」用例所需特殊题（RE/CE 触发代码）整理为固定代码片段，降低手工依赖。
-- [ ] 并发用例（WT-EDGE-004）接入 `npx playwright test --workers=N` 分片并行。
+- [ ] 并发用例（WT-EDGE-004）接入 `pytest-xdist` 或独立线程模拟。
 - [ ] 补充移动端/窄屏布局冒烟（管理员表单、题目详情两栏布局）。
