@@ -43,3 +43,6 @@ logs/
 
 # opencode
 .opencode/
+
+# webtest
+tests/ui/
