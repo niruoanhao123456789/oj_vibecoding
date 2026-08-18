@@ -1,6 +1,6 @@
 # OJ Vibecoding
 
-基于 Vibecoding 实践构建的**仿 LeetCode 在线判题（OJ）教学平台**。英语文档见**[README.en.md](README.en.md)**。教师建班发题、导入题目，学生注册登录后在线编写 C/C++ 代码并提交，后端异步判题（实时返回 AC/WA/TLE/MLE/CE/RE 结果），并支持提交历史、个人统计、班级管理与 CSV 导出。
+基于 Vibecoding 实践构建的**仿 LeetCode 在线判题（OJ）教学平台**。英语文档见[README.en.md](README.en.md)。教师建班发题、导入题目，学生注册登录后在线编写 C/C++ 代码并提交，后端异步判题（实时返回 AC/WA/TLE/MLE/CE/RE 结果），并支持提交历史、个人统计、班级管理与 CSV 导出。
 
 ## 功能特性
 
